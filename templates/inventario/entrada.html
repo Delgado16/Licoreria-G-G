@@ -1,0 +1,496 @@
+{% extends "base.html" %}
+
+{% block title %}Entrada de Inventario - Licoreria G&G{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-box-arrow-in-down"></i> Entrada de Inventario</h1>
+        <div>
+            <button class="btn btn-outline-secondary" onclick="limpiarFormulario()">
+                <i class="bi bi-arrow-clockwise"></i> Limpiar
+            </button>
+            <a href="{{ url_for('inventario') }}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Volver al Inventario
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Panel de Información General -->
+        <div class="col-md-4">
+            <div class="card shadow mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-info-circle"></i> Información del Movimiento</h5>
+                </div>
+                <div class="card-body">
+                    <form id="formEntrada">
+                <div class="mb-3">
+                    <label for="tipo_movimiento" class="form-label">Tipo de Movimiento *</label>
+                    <select id="tipo_movimiento" class="form-select" required>
+                        <option value="">Seleccionar tipo...</option>
+                        {% for tipo in tipos_movimiento %}
+                        <option value="{{ tipo.ID_TipoMovimiento }}" 
+                                data-adicion="{{ tipo.Adicion }}">  {# Ahora será "ENTRADA" #}
+                            {{ tipo.Descripcion }} ({{ tipo.Letra }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                        <div class="mb-3">
+                            <label for="bodega" class="form-label">Bodega Destino *</label>
+                            <select id="bodega" class="form-select" required>
+                                <option value="">Seleccionar bodega...</option>
+                                {% for bodega in bodegas %}
+                                <option value="{{ bodega.ID_Bodega }}">{{ bodega.Nombre }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="proveedor" class="form-label">Proveedor</label>
+                            <select id="proveedor" class="form-select">
+                                <option value="">Seleccionar proveedor...</option>
+                                {% for proveedor in proveedores %}
+                                <option value="{{ proveedor.ID_Proveedor }}">{{ proveedor.Nombre }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="n_factura" class="form-label">N° Factura/Documento</label>
+                                    <input type="text" id="n_factura" class="form-control" placeholder="Opcional">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="fecha_movimiento" class="form-label">Fecha</label>
+                                    <input type="date" id="fecha_movimiento" class="form-control" value="{{ now().strftime('%Y-%m-%d') }}">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="observacion" class="form-label">Observaciones</label>
+                            <textarea id="observacion" class="form-control" rows="3" 
+                                      placeholder="Descripción del movimiento..."></textarea>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Resumen del Movimiento -->
+            <div class="card shadow">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="bi bi-receipt"></i> Resumen</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <h4 id="totalProductos" class="text-primary">0</h4>
+                            <small class="text-muted">Productos</small>
+                        </div>
+                        <div class="col-6">
+                            <h4 id="totalCantidad" class="text-success">0</h4>
+                            <small class="text-muted">Unidades</small>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <strong>Total Entrada:</strong>
+                        <span id="totalMovimiento" class="h5 text-success">$0.00</span>
+                    </div>
+                    
+                    <div class="d-grid gap-2 mt-3">
+                        <button id="btnGuardar" class="btn btn-success btn-lg" onclick="guardarEntrada()" disabled>
+                            <i class="bi bi-check-circle"></i> Registrar Entrada
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel de Productos -->
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-box-seam"></i> Gestión de Productos</h5>
+                    <div class="input-group" style="width: 300px;">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" id="searchProducto" class="form-control" 
+                               placeholder="Buscar producto...">
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Productos Agregados -->
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2">
+                            <i class="bi bi-list-check"></i> Productos en la Entrada
+                            <span class="badge bg-primary ms-2" id="contadorProductos">0</span>
+                        </h6>
+                        <div id="productosAgregados" class="table-responsive" style="max-height: 300px;">
+                            <table class="table table-sm">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>Producto</th>
+                                        <th width="100">Cantidad</th>
+                                        <th width="120">Costo Unit.</th>
+                                        <th width="120">Total</th>
+                                        <th width="80">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaProductosBody">
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted py-4">
+                                            <i class="bi bi-inbox display-4 d-block mb-2"></i>
+                                            No hay productos agregados
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Lista de Productos Disponibles -->
+                    <h6 class="border-bottom pb-2">
+                        <i class="bi bi-box"></i> Catálogo de Productos
+                    </h6>
+                    <div class="table-responsive" style="max-height: 400px;">
+                        <table class="table table-sm table-hover">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Categoría</th>
+                                    <th>Stock Actual</th>
+                                    <th>Costo Prom.</th>
+                                    <th width="100">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="productosTableBody">
+                                {% for producto in productos %}
+                                <tr class="producto-row" data-nombre="{{ producto.Descripcion|lower }}" 
+                                    data-categoria="{{ producto.Categoria|lower if producto.Categoria else '' }}">
+                                    <td>
+                                        <strong>{{ producto.Descripcion }}</strong>
+                                        <br>
+                                        <small class="text-muted">{{ producto.Abreviatura }}</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-dark">{{ producto.Categoria or 'Sin categoría' }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge {% if producto.Existencias <= producto.Stock_Minimo %}bg-warning{% else %}bg-secondary{% endif %}">
+                                            {{ producto.Existencias }} {{ producto.Abreviatura }}
+                                        </span>
+                                        {% if producto.Existencias <= producto.Stock_Minimo %}
+                                        <br><small class="text-warning"><i class="bi bi-exclamation-triangle"></i> Stock bajo</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>${{ producto.Costo_Promedio or '0.00' }}</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-success" 
+                                                onclick="mostrarModalProducto({{ producto.ID_Producto }}, '{{ producto.Descripcion }}', {{ producto.Existencias }}, '{{ producto.Abreviatura }}', {{ producto.Costo_Promedio or 0 }})">
+                                            <i class="bi bi-plus-lg"></i> Agregar
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para Agregar Producto -->
+<div class="modal fade" id="modalProducto" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalProductoTitulo">Agregar Producto</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formProducto">
+                    <input type="hidden" id="modalProductoId">
+                    <div class="mb-3">
+                        <label class="form-label">Producto</label>
+                        <p class="form-control-plaintext" id="modalProductoNombre"></p>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="modalCantidad" class="form-label">Cantidad *</label>
+                                <input type="number" id="modalCantidad" class="form-control" 
+                                       min="0.01" step="0.01" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="modalCosto" class="form-label">Costo Unitario ($) *</label>
+                                <input type="number" id="modalCosto" class="form-control" 
+                                       min="0.01" step="0.01" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Total</label>
+                        <p class="h5 text-success" id="modalTotal">$0.00</p>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" onclick="agregarDesdeModal()">
+                    <i class="bi bi-plus-circle"></i> Agregar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let productosEntrada = [];
+let modalProducto = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    modalProducto = new bootstrap.Modal(document.getElementById('modalProducto'));
+    
+    // Calcular total en tiempo real
+    document.getElementById('modalCantidad').addEventListener('input', calcularTotalModal);
+    document.getElementById('modalCosto').addEventListener('input', calcularTotalModal);
+    
+    // Búsqueda avanzada
+    document.getElementById('searchProducto').addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase();
+        const rows = document.querySelectorAll('.producto-row');
+        
+        rows.forEach(row => {
+            const nombre = row.getAttribute('data-nombre');
+            const categoria = row.getAttribute('data-categoria');
+            const match = nombre.includes(searchTerm) || categoria.includes(searchTerm);
+            row.style.display = match ? '' : 'none';
+        });
+    });
+});
+
+function mostrarModalProducto(id, nombre, stockActual, unidad, costoPromedio) {
+    document.getElementById('modalProductoId').value = id;
+    document.getElementById('modalProductoNombre').textContent = `${nombre} (${unidad})`;
+    document.getElementById('modalCantidad').value = '';
+    document.getElementById('modalCosto').value = costoPromedio || '';
+    document.getElementById('modalTotal').textContent = '$0.00';
+    
+    modalProducto.show();
+}
+
+function calcularTotalModal() {
+    const cantidad = parseFloat(document.getElementById('modalCantidad').value) || 0;
+    const costo = parseFloat(document.getElementById('modalCosto').value) || 0;
+    const total = cantidad * costo;
+    document.getElementById('modalTotal').textContent = `$${total.toFixed(2)}`;
+}
+
+function agregarDesdeModal() {
+    const id = document.getElementById('modalProductoId').value;
+    const nombre = document.getElementById('modalProductoNombre').textContent.split(' (')[0];
+    const cantidad = parseFloat(document.getElementById('modalCantidad').value);
+    const costo = parseFloat(document.getElementById('modalCosto').value);
+    const unidad = document.getElementById('modalProductoNombre').textContent.match(/\(([^)]+)\)/)[1];
+    
+    if (!cantidad || cantidad <= 0 || !costo || costo <= 0) {
+        mostrarToast('Completa cantidad y costo válidos', 'warning');
+        return;
+    }
+    
+    // Verificar si el producto ya existe
+    const indexExistente = productosEntrada.findIndex(p => p.producto_id == id);
+    
+    if (indexExistente !== -1) {
+        if (!confirm('Este producto ya está en la lista. ¿Desea actualizar la cantidad y costo?')) {
+            return;
+        }
+        productosEntrada[indexExistente].cantidad = cantidad;
+        productosEntrada[indexExistente].costo = costo;
+        productosEntrada[indexExistente].costo_total = cantidad * costo;
+    } else {
+        productosEntrada.push({
+            producto_id: parseInt(id),
+            nombre: nombre,
+            cantidad: cantidad,
+            costo: costo,
+            costo_total: cantidad * costo,
+            unidad: unidad
+        });
+    }
+    
+    modalProducto.hide();
+    actualizarListaProductos();
+    mostrarToast('Producto agregado', 'success');
+}
+
+function actualizarListaProductos() {
+    const tbody = document.getElementById('tablaProductosBody');
+    const contador = document.getElementById('contadorProductos');
+    const btnGuardar = document.getElementById('btnGuardar');
+    const totalProductos = document.getElementById('totalProductos');
+    const totalCantidad = document.getElementById('totalCantidad');
+    const totalMovimiento = document.getElementById('totalMovimiento');
+    
+    if (productosEntrada.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" class="text-center text-muted py-4">
+                    <i class="bi bi-inbox display-4 d-block mb-2"></i>
+                    No hay productos agregados
+                </td>
+            </tr>
+        `;
+        btnGuardar.disabled = true;
+        totalProductos.textContent = '0';
+        totalCantidad.textContent = '0';
+        totalMovimiento.textContent = '$0.00';
+        contador.textContent = '0';
+        return;
+    }
+    
+    let html = '';
+    let totalUnidades = 0;
+    let totalGeneral = 0;
+    
+    productosEntrada.forEach((item, index) => {
+        totalUnidades += item.cantidad;
+        totalGeneral += item.costo_total;
+        
+        html += `
+            <tr>
+                <td>
+                    <strong>${item.nombre}</strong>
+                    <br><small class="text-muted">${item.unidad}</small>
+                </td>
+                <td>
+                    <input type="number" class="form-control form-control-sm" 
+                           value="${item.cantidad}" min="0.01" step="0.01"
+                           onchange="actualizarCantidad(${index}, this.value)">
+                </td>
+                <td>
+                    <input type="number" class="form-control form-control-sm" 
+                           value="${item.costo.toFixed(2)}" min="0.01" step="0.01"
+                           onchange="actualizarCosto(${index}, this.value)">
+                </td>
+                <td class="text-success fw-bold">$${item.costo_total.toFixed(2)}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-danger" onclick="eliminarProducto(${index})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+    
+    tbody.innerHTML = html;
+    btnGuardar.disabled = false;
+    totalProductos.textContent = productosEntrada.length;
+    totalCantidad.textContent = totalUnidades.toFixed(2);
+    totalMovimiento.textContent = `$${totalGeneral.toFixed(2)}`;
+    contador.textContent = productosEntrada.length;
+}
+
+function actualizarCantidad(index, nuevaCantidad) {
+    const cantidad = parseFloat(nuevaCantidad);
+    if (cantidad > 0) {
+        productosEntrada[index].cantidad = cantidad;
+        productosEntrada[index].costo_total = cantidad * productosEntrada[index].costo;
+        actualizarListaProductos();
+    }
+}
+
+function actualizarCosto(index, nuevoCosto) {
+    const costo = parseFloat(nuevoCosto);
+    if (costo > 0) {
+        productosEntrada[index].costo = costo;
+        productosEntrada[index].costo_total = productosEntrada[index].cantidad * costo;
+        actualizarListaProductos();
+    }
+}
+
+function eliminarProducto(index) {
+    if (confirm('¿Eliminar este producto de la entrada?')) {
+        productosEntrada.splice(index, 1);
+        actualizarListaProductos();
+        mostrarToast('Producto eliminado', 'warning');
+    }
+}
+
+function limpiarFormulario() {
+    if (productosEntrada.length > 0 && !confirm('¿Estás seguro de limpiar todo el formulario? Se perderán todos los productos agregados.')) {
+        return;
+    }
+    
+    productosEntrada = [];
+    actualizarListaProductos();
+    document.getElementById('formEntrada').reset();
+    document.getElementById('fecha_movimiento').value = new Date().toISOString().split('T')[0];
+    mostrarToast('Formulario limpiado', 'info');
+}
+
+async function guardarEntrada() {
+    // Validaciones básicas
+    const tipoMovimiento = document.getElementById('tipo_movimiento').value;
+    const bodega = document.getElementById('bodega').value;
+    
+    if (!tipoMovimiento || !bodega) {
+        mostrarToast('Selecciona el tipo de movimiento y la bodega', 'warning');
+        return;
+    }
+    
+    if (productosEntrada.length === 0) {
+        mostrarToast('Agrega al menos un producto a la entrada', 'warning');
+        return;
+    }
+    
+    const btnGuardar = document.getElementById('btnGuardar');
+    const originalText = btnGuardar.innerHTML;
+    
+    btnGuardar.disabled = true;
+    btnGuardar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Procesando...';
+    
+    try {
+        const response = await fetch('/inventario/entrada', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                tipo_movimiento_id: tipoMovimiento,
+                proveedor_id: document.getElementById('proveedor').value || null,
+                bodega_id: bodega,
+                n_factura: document.getElementById('n_factura').value,
+                observacion: document.getElementById('observacion').value,
+                items: productosEntrada
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            mostrarToast('¡Entrada de inventario registrada exitosamente!', 'success');
+            setTimeout(() => {
+                window.location.href = '/inventario';
+            }, 2000);
+        } else {
+            throw new Error(data.message || 'Error al guardar');
+        }
+    } catch (error) {
+        mostrarToast(error.message || 'Error de conexión', 'danger');
+        btnGuardar.disabled = false;
+        btnGuardar.innerHTML = originalText;
+    }
+}
+</script>
+{% endblock %}

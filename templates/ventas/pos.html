@@ -1,0 +1,766 @@
+{% extends "base.html" %}
+
+{% block title %}Punto de Venta - Licoreria G&G{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <!-- Panel de productos -->
+        <div class="col-md-7">
+            <div class="card shadow mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-grid-3x3-gap"></i> Productos</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Búsqueda y filtros -->
+                    <div class="row mb-3">
+                        <div class="col-md-8">
+                            <input type="text" id="searchProducto" class="form-control" 
+                                   placeholder="Buscar producto por nombre o código...">
+                        </div>
+                        <div class="col-md-4">
+                            <select id="filterCategoria" class="form-select">
+                                <option value="todas">Todas las categorías</option>
+                                {% for categoria in categorias %}
+                                <option value="{{ categoria.ID_Categoria }}">{{ categoria.Descripcion }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Grid de productos -->
+                    <div id="productosGrid" class="row g-3" style="max-height: 500px; overflow-y: auto;">
+                        {% for producto in productos %}
+                        <div class="col-md-4 col-sm-6 producto-item" 
+                             data-categoria="{{ producto.Categoria_ID or '' }}"
+                             data-id="{{ producto.ID_Producto }}"
+                             data-nombre="{{ producto.Descripcion }}"
+                             data-precio="{{ producto.Precio_Venta }}"
+                             data-stock="{{ producto.Stock_Bodega or producto.Existencias }}"
+                             data-unidad="{{ producto.Abreviatura }}"
+                             data-categoria-nombre="{{ producto.Categoria }}">
+                            <div class="card pos-product-card h-100" 
+                                 onclick="agregarAlCarrito({{ producto.ID_Producto }}, '{{ producto.Descripcion|replace("'", "\\'") }}', {{ producto.Precio_Venta }}, {{ producto.Stock_Bodega or producto.Existencias }}, '{{ producto.Abreviatura }}')">
+                                <div class="card-body p-3">
+                                    <h6 class="card-title mb-1 text-truncate">{{ producto.Descripcion }}</h6>
+                                    <p class="card-text mb-1">
+                                        <small class="text-muted">{{ producto.Categoria or 'Sin categoría' }}</small>
+                                    </p>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="h5 mb-0 text-primary">${{ "%.2f"|format(producto.Precio_Venta) }}</span>
+                                        <span class="badge {% if (producto.Stock_Bodega or producto.Existencias) > 0 %}bg-success{% else %}bg-danger{% endif %}">
+                                            Stock: {{ producto.Stock_Bodega or producto.Existencias }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="col-12">
+                            <p class="text-center text-muted">No hay productos disponibles</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel de carrito -->
+        <div class="col-md-5">
+            <div class="card shadow sticky-top" style="top: 20px;">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="bi bi-cart-check"></i> Carrito de Venta</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Items del carrito -->
+                    <div id="carritoItems" style="max-height: 300px; overflow-y: auto; min-height: 200px;">
+                        <p class="text-center text-muted mt-5">El carrito está vacío</p>
+                    </div>
+
+                    <hr>
+
+                    <!-- Totales -->
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-2">
+                            <strong>Total:</strong>
+                            <strong class="h4 text-primary" id="totalVenta">$0.00</strong>
+                        </div>
+                    </div>
+
+                    <!-- Método de pago -->
+                    <div class="mb-3">
+                        <label for="metodoPago" class="form-label">Método de Pago</label>
+                        <select id="metodoPago" class="form-select" required>
+                            <option value="">Seleccionar...</option>
+                            {% for metodo in metodos_pago %}
+                            <option value="{{ metodo.ID_MetodoPago }}">{{ metodo.Nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Efectivo recibido -->
+                    <div class="mb-3" id="efectivoContainer" style="display: none;">
+                        <label for="efectivo" class="form-label">Efectivo Recibido</label>
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            <input type="number" id="efectivo" class="form-control" 
+                                   step="0.01" min="0" placeholder="0.00">
+                        </div>
+                        <div id="cambioDisplay" class="mt-2" style="display: none;">
+                            <strong>Cambio: <span class="text-success" id="cambioMonto">$0.00</span></strong>
+                        </div>
+                    </div>
+
+                    <!-- Observaciones -->
+                    <div class="mb-3">
+                        <label for="observacion" class="form-label">Observaciones</label>
+                        <textarea id="observacion" class="form-control" rows="2" 
+                                  placeholder="Opcional..."></textarea>
+                    </div>
+
+                    <!-- Botones de acción -->
+                    <div class="d-grid gap-2">
+                        <button id="btnProcesarVenta" class="btn btn-success btn-lg" onclick="procesarVenta()" disabled>
+                            <i class="bi bi-check-circle"></i> Procesar Venta
+                        </button>
+                        <button class="btn btn-outline-danger" onclick="limpiarCarrito()">
+                            <i class="bi bi-trash"></i> Limpiar Carrito
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de confirmación de venta exitosa -->
+<div class="modal fade" id="ventaExitosaModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="bi bi-check-circle"></i> Venta Exitosa</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <i class="bi bi-check-circle-fill text-success display-4 mb-3"></i>
+                <h4 class="text-success">¡Venta Procesada!</h4>
+                <p class="mb-1"><strong>Factura:</strong> #<span id="modalFacturaId"></span></p>
+                <p class="mb-1"><strong>Total:</strong> $<span id="modalTotal"></span></p>
+                <p class="mb-0"><strong>Cambio:</strong> $<span id="modalCambio"></span></p>
+            </div>
+            <div class="modal-footer justify-content-center">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Continuar Vendiendo</button>
+                <button type="button" class="btn btn-primary" onclick="imprimirTicket()">
+                    <i class="bi bi-printer"></i> Imprimir Ticket
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let carrito = [];
+
+// =============================================
+// FUNCIONES DE ACTUALIZACIÓN AUTOMÁTICA DE STOCK
+// =============================================
+
+// Función para actualizar existencias de productos vendidos
+async function actualizarExistenciasProductosVendidos(productosVendidos) {
+    try {
+        console.log('Actualizando existencias para productos vendidos...');
+        
+        // Actualizar solo los productos que se vendieron
+        for (const item of productosVendidos) {
+            const response = await fetch(`/api/producto/${item.producto_id}?bodega_id=1`);
+            const productoActualizado = await response.json();
+            
+            if (!productoActualizado.error) {
+                const productoElement = document.querySelector(`.producto-item[data-id="${item.producto_id}"]`);
+                if (productoElement) {
+                    // Actualizar datos en el elemento
+                    const nuevoStock = productoActualizado.Stock_Bodega || productoActualizado.Existencias;
+                    productoElement.dataset.stock = nuevoStock;
+                    
+                    // Actualizar visualmente el badge de stock
+                    const badgeStock = productoElement.querySelector('.badge');
+                    if (badgeStock) {
+                        badgeStock.textContent = `Stock: ${nuevoStock}`;
+                        
+                        // Cambiar color según stock
+                        if (nuevoStock > 0) {
+                            badgeStock.className = 'badge bg-success';
+                        } else {
+                            badgeStock.className = 'badge bg-danger';
+                        }
+                    }
+                    
+                    // Actualizar en carrito si existe
+                    const itemCarrito = carrito.find(item => item.producto_id === item.producto_id);
+                    if (itemCarrito) {
+                        itemCarrito.stock = nuevoStock;
+                    }
+                    
+                    // Actualizar la función onclick con el nuevo stock
+                    const card = productoElement.querySelector('.pos-product-card');
+                    if (card) {
+                        if (nuevoStock <= 0) {
+                            // Deshabilitar producto sin stock
+                            card.style.opacity = '0.6';
+                            card.style.cursor = 'not-allowed';
+                            card.onclick = null;
+                            card.classList.add('producto-sin-stock');
+                        } else {
+                            // Habilitar producto con stock
+                            card.style.opacity = '1';
+                            card.style.cursor = 'pointer';
+                            card.classList.remove('producto-sin-stock');
+                            card.onclick = function() {
+                                agregarAlCarrito(
+                                    parseInt(productoElement.dataset.id),
+                                    productoElement.dataset.nombre,
+                                    parseFloat(productoElement.dataset.precio),
+                                    parseInt(productoElement.dataset.stock),
+                                    productoElement.dataset.unidad
+                                );
+                            };
+                        }
+                    }
+                    
+                    console.log(`Producto ${item.producto_id} actualizado: Stock ${nuevoStock}`);
+                }
+            }
+        }
+        
+        mostrarToast('Stock actualizado automáticamente', 'success');
+    } catch (error) {
+        console.error('Error al actualizar existencias:', error);
+        mostrarToast('Error al actualizar stock', 'warning');
+    }
+}
+
+// Función para deshabilitar productos sin stock al cargar la página
+function deshabilitarProductosSinStock() {
+    const productos = document.querySelectorAll('.producto-item');
+    productos.forEach(producto => {
+        const stock = parseInt(producto.dataset.stock) || 0;
+        const card = producto.querySelector('.pos-product-card');
+        
+        if (stock <= 0 && card) {
+            card.style.opacity = '0.6';
+            card.style.cursor = 'not-allowed';
+            card.onclick = null;
+            card.classList.add('producto-sin-stock');
+        }
+    });
+}
+
+// =============================================
+// FUNCIONES PRINCIPALES DEL CARRITO
+// =============================================
+
+// Cargar venta repetida si existe
+document.addEventListener('DOMContentLoaded', function() {
+    const ventaRepetir = sessionStorage.getItem('ventaRepetir');
+    if (ventaRepetir) {
+        try {
+            const data = JSON.parse(ventaRepetir);
+            mostrarToast(`Cargando venta #${data.factura_id}...`, 'info');
+            
+            // Agregar productos al carrito después de un breve delay
+            setTimeout(() => {
+                data.productos.forEach(producto => {
+                    // Verificar stock actual antes de agregar
+                    verificarStockYAgregar(producto);
+                });
+                sessionStorage.removeItem('ventaRepetir');
+                mostrarToast('Venta cargada en el carrito', 'success');
+            }, 500);
+        } catch (error) {
+            console.error('Error al cargar venta repetida:', error);
+            sessionStorage.removeItem('ventaRepetir');
+        }
+    }
+    
+    // Deshabilitar productos sin stock al cargar la página
+    deshabilitarProductosSinStock();
+    
+    // Focus en búsqueda al cargar la página
+    document.getElementById('searchProducto').focus();
+});
+
+// Verificar stock y agregar producto
+async function verificarStockYAgregar(producto) {
+    try {
+        const response = await fetch(`/api/producto/${producto.producto_id}?bodega_id=1`);
+        const productoActual = await response.json();
+        
+        if (productoActual.error) {
+            mostrarToast(`Producto ${producto.nombre} no disponible`, 'warning');
+            return;
+        }
+        
+        const stockActual = productoActual.Stock_Bodega || productoActual.Existencias;
+        
+        if (stockActual >= producto.cantidad) {
+            agregarAlCarrito(
+                producto.producto_id,
+                producto.nombre,
+                producto.precio_venta,
+                stockActual,
+                producto.unidad
+            );
+        } else {
+            mostrarToast(`Stock insuficiente para ${producto.nombre} (disp: ${stockActual})`, 'warning');
+        }
+    } catch (error) {
+        console.error('Error al verificar stock:', error);
+        mostrarToast(`Error al verificar stock de ${producto.nombre}`, 'danger');
+    }
+}
+
+// Función para mostrar notificaciones
+function mostrarToast(mensaje, tipo = 'info') {
+    const alertClass = {
+        'success': 'alert-success',
+        'warning': 'alert-warning', 
+        'danger': 'alert-danger',
+        'info': 'alert-info'
+    }[tipo] || 'alert-info';
+    
+    // Crear alerta temporal
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    alertDiv.innerHTML = `
+        ${mensaje}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(alertDiv);
+    
+    // Auto-remover después de 3 segundos
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 3000);
+}
+
+// Agregar producto al carrito
+function agregarAlCarrito(id, nombre, precio, stock, unidad) {
+    // Validar stock disponible
+    if (stock <= 0) {
+        mostrarToast('Producto sin stock disponible', 'warning');
+        return;
+    }
+    
+    const itemExistente = carrito.find(item => item.producto_id === id);
+    
+    if (itemExistente) {
+        if (itemExistente.cantidad < stock) {
+            itemExistente.cantidad++;
+            itemExistente.subtotal = itemExistente.cantidad * itemExistente.precio_venta;
+        } else {
+            mostrarToast('Stock insuficiente', 'warning');
+            return;
+        }
+    } else {
+        carrito.push({
+            producto_id: id,
+            nombre: nombre,
+            precio_venta: precio,
+            cantidad: 1,
+            subtotal: precio,
+            stock: stock,
+            unidad: unidad
+        });
+    }
+    
+    actualizarCarrito();
+    mostrarToast('Producto agregado al carrito', 'success');
+}
+
+// Actualizar visualización del carrito
+function actualizarCarrito() {
+    const container = document.getElementById('carritoItems');
+    const btnProcesar = document.getElementById('btnProcesarVenta');
+    const totalElement = document.getElementById('totalVenta');
+    
+    if (carrito.length === 0) {
+        container.innerHTML = '<p class="text-center text-muted mt-5">El carrito está vacío</p>';
+        btnProcesar.disabled = true;
+        totalElement.textContent = '$0.00';
+        
+        // Resetear campos relacionados
+        document.getElementById('efectivo').value = '';
+        document.getElementById('cambioDisplay').style.display = 'none';
+        return;
+    }
+    
+    let html = '';
+    let total = 0;
+    
+    carrito.forEach((item, index) => {
+        total += item.subtotal;
+        html += `
+            <div class="cart-item border-bottom pb-2 mb-2">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1 me-2">
+                        <strong class="d-block">${item.nombre}</strong>
+                        <small class="text-muted">$${item.precio_venta.toFixed(2)} / ${item.unidad}</small>
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger" onclick="eliminarDelCarrito(${index})">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mt-2">
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-secondary" onclick="cambiarCantidad(${index}, -1)">-</button>
+                        <button class="btn btn-outline-dark" disabled>${item.cantidad}</button>
+                        <button class="btn btn-outline-secondary" onclick="cambiarCantidad(${index}, 1)">+</button>
+                    </div>
+                    <strong class="text-primary">$${item.subtotal.toFixed(2)}</strong>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+    totalElement.textContent = `$${total.toFixed(2)}`;
+    btnProcesar.disabled = false;
+    
+    // Actualizar cálculo de cambio si hay efectivo
+    const efectivo = parseFloat(document.getElementById('efectivo').value) || 0;
+    if (efectivo > 0) {
+        calcularCambio();
+    }
+}
+
+// Cambiar cantidad de un item
+function cambiarCantidad(index, cambio) {
+    const item = carrito[index];
+    const nuevaCantidad = item.cantidad + cambio;
+    
+    if (nuevaCantidad <= 0) {
+        eliminarDelCarrito(index);
+        return;
+    }
+    
+    if (nuevaCantidad > item.stock) {
+        mostrarToast('Stock insuficiente', 'warning');
+        return;
+    }
+    
+    item.cantidad = nuevaCantidad;
+    item.subtotal = item.cantidad * item.precio_venta;
+    actualizarCarrito();
+}
+
+// Eliminar item del carrito
+function eliminarDelCarrito(index) {
+    const productoNombre = carrito[index].nombre;
+    carrito.splice(index, 1);
+    actualizarCarrito();
+    mostrarToast(`"${productoNombre}" eliminado del carrito`, 'info');
+}
+
+// Limpiar carrito
+function limpiarCarrito() {
+    if (carrito.length === 0) return;
+    
+    if (!confirm('¿Estás seguro de que quieres limpiar el carrito?')) return;
+    
+    carrito = [];
+    actualizarCarrito();
+    document.getElementById('metodoPago').value = '';
+    document.getElementById('efectivo').value = '';
+    document.getElementById('observacion').value = '';
+    document.getElementById('efectivoContainer').style.display = 'none';
+    
+    mostrarToast('Carrito limpiado', 'info');
+}
+
+// Calcular cambio
+function calcularCambio() {
+    const total = carrito.reduce((sum, item) => sum + item.subtotal, 0);
+    const efectivo = parseFloat(document.getElementById('efectivo').value) || 0;
+    const cambio = efectivo - total;
+    
+    const cambioDisplay = document.getElementById('cambioDisplay');
+    const cambioMonto = document.getElementById('cambioMonto');
+    
+    if (efectivo > 0) {
+        cambioDisplay.style.display = 'block';
+        cambioMonto.textContent = Math.max(0, cambio).toFixed(2);
+        
+        if (cambio >= 0) {
+            cambioMonto.className = 'text-success';
+        } else {
+            cambioMonto.className = 'text-danger';
+            cambioMonto.textContent = Math.abs(cambio).toFixed(2);
+        }
+    } else {
+        cambioDisplay.style.display = 'none';
+    }
+}
+
+// =============================================
+// PROCESAR VENTA CON ACTUALIZACIÓN AUTOMÁTICA
+// =============================================
+
+// Procesar venta - VERSIÓN MEJORADA CON ACTUALIZACIÓN AUTOMÁTICA
+async function procesarVenta() {
+    const metodoPagoId = document.getElementById('metodoPago').value;
+    const efectivo = parseFloat(document.getElementById('efectivo').value) || 0;
+    const observacion = document.getElementById('observacion').value;
+    
+    // Validaciones
+    if (!metodoPagoId) {
+        mostrarToast('Selecciona un método de pago', 'warning');
+        return;
+    }
+    
+    if (carrito.length === 0) {
+        mostrarToast('El carrito está vacío', 'warning');
+        return;
+    }
+    
+    const total = carrito.reduce((sum, item) => sum + item.subtotal, 0);
+    
+    // Validar efectivo si es método efectivo (asumiendo ID 1 es efectivo)
+    const esEfectivo = metodoPagoId === '1';
+    if (esEfectivo) {
+        if (efectivo <= 0) {
+            mostrarToast('Ingresa el efectivo recibido', 'warning');
+            return;
+        }
+        if (efectivo < total) {
+            mostrarToast('El efectivo recibido es insuficiente', 'warning');
+            return;
+        }
+    }
+    
+    const btnProcesar = document.getElementById('btnProcesarVenta');
+    btnProcesar.disabled = true;
+    btnProcesar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Procesando...';
+    
+    try {
+        const response = await fetch('/ventas/procesar', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                items: carrito,
+                metodo_pago_id: parseInt(metodoPagoId),
+                efectivo: esEfectivo ? efectivo : 0,
+                observacion: observacion,
+                bodega_id: 1
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Guardar una copia del carrito para actualizar existencias
+            const carritoVendido = [...carrito];
+            
+            // Mostrar modal de éxito
+            document.getElementById('modalFacturaId').textContent = data.factura_id;
+            document.getElementById('modalTotal').textContent = data.total.toFixed(2);
+            document.getElementById('modalCambio').textContent = data.cambio.toFixed(2);
+            
+            const modal = new bootstrap.Modal(document.getElementById('ventaExitosaModal'));
+            modal.show();
+            
+            // ✅ ACTUALIZAR EXISTENCIAS AUTOMÁTICAMENTE DESPUÉS DE VENTA EXITOSA
+            await actualizarExistenciasProductosVendidos(carritoVendido);
+            
+            // Limpiar carrito automáticamente después de venta exitosa
+            carrito = [];
+            actualizarCarrito();
+            document.getElementById('metodoPago').value = '';
+            document.getElementById('efectivo').value = '';
+            document.getElementById('observacion').value = '';
+            document.getElementById('efectivoContainer').style.display = 'none';
+            
+        } else {
+            mostrarToast(`❌ ${data.message}`, 'danger');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        mostrarToast('❌ Error de conexión al procesar la venta', 'danger');
+    } finally {
+        btnProcesar.disabled = false;
+        btnProcesar.innerHTML = '<i class="bi bi-check-circle"></i> Procesar Venta';
+    }
+}
+
+// Función para imprimir ticket (placeholder)
+function imprimirTicket() {
+    // Aquí puedes implementar la impresión del ticket
+    mostrarToast('Funcionalidad de impresión en desarrollo', 'info');
+    const modal = bootstrap.Modal.getInstance(document.getElementById('ventaExitosaModal'));
+    modal.hide();
+}
+
+// =============================================
+// EVENT LISTENERS Y BÚSQUEDA
+// =============================================
+
+// Event Listeners
+document.addEventListener('DOMContentLoaded', function() {
+    // Mostrar/ocultar campo de efectivo según método de pago
+    document.getElementById('metodoPago').addEventListener('change', function() {
+        const efectivoContainer = document.getElementById('efectivoContainer');
+        // Asumiendo que ID 1 es Efectivo - ajusta según tus datos
+        if (this.value === '1') {
+            efectivoContainer.style.display = 'block';
+            document.getElementById('efectivo').focus();
+        } else {
+            efectivoContainer.style.display = 'none';
+            document.getElementById('efectivo').value = '';
+            document.getElementById('cambioDisplay').style.display = 'none';
+        }
+    });
+
+    // Calcular cambio en tiempo real
+    document.getElementById('efectivo').addEventListener('input', calcularCambio);
+
+    // Búsqueda de productos
+    document.getElementById('searchProducto').addEventListener('input', filtrarProductos);
+    document.getElementById('filterCategoria').addEventListener('change', filtrarProductos);
+});
+
+// Búsqueda y filtrado de productos
+function filtrarProductos() {
+    const searchTerm = document.getElementById('searchProducto').value.toLowerCase();
+    const categoriaId = document.getElementById('filterCategoria').value;
+    const productos = document.querySelectorAll('.producto-item');
+    
+    let productosVisibles = 0;
+    
+    productos.forEach(producto => {
+        const nombre = producto.dataset.nombre.toLowerCase();
+        const id = producto.dataset.id;
+        const categoria = producto.dataset.categoria;
+        
+        const matchSearch = nombre.includes(searchTerm) || id.includes(searchTerm);
+        const matchCategoria = categoriaId === 'todas' || categoria === categoriaId;
+        
+        if (matchSearch && matchCategoria) {
+            producto.style.display = '';
+            productosVisibles++;
+        } else {
+            producto.style.display = 'none';
+        }
+    });
+    
+    // Mostrar mensaje si no hay resultados
+    const gridContainer = document.getElementById('productosGrid');
+    let mensaje = gridContainer.querySelector('.no-results-message');
+    
+    if (productosVisibles === 0) {
+        if (!mensaje) {
+            mensaje = document.createElement('div');
+            mensaje.className = 'col-12 no-results-message';
+            mensaje.innerHTML = '<p class="text-center text-muted py-4">No se encontraron productos</p>';
+            gridContainer.appendChild(mensaje);
+        }
+    } else if (mensaje) {
+        mensaje.remove();
+    }
+}
+
+// Teclado rápido para búsqueda
+document.addEventListener('keydown', function(e) {
+    // Focus en búsqueda con Ctrl+F
+    if (e.ctrlKey && e.key === 'f') {
+        e.preventDefault();
+        document.getElementById('searchProducto').focus();
+    }
+    
+    // Limpiar carrito con Escape
+    if (e.key === 'Escape' && carrito.length > 0) {
+        limpiarCarrito();
+    }
+    
+    // Procesar venta con F2
+    if (e.key === 'F2') {
+        e.preventDefault();
+        procesarVenta();
+    }
+});
+</script>
+
+<style>
+.pos-product-card {
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    border: 2px solid transparent;
+}
+
+.pos-product-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    border-color: #007bff;
+}
+
+.cart-item {
+    padding: 8px;
+    border-radius: 4px;
+    background-color: #f8f9fa;
+}
+
+.btn-group-sm > .btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+}
+
+/* Estilos para productos sin stock */
+.producto-sin-stock {
+    position: relative;
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.producto-sin-stock::after {
+    content: "SIN STOCK";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-45deg);
+    background: rgba(220, 53, 69, 0.9);
+    color: white;
+    padding: 5px 15px;
+    font-weight: bold;
+    font-size: 12px;
+    border-radius: 4px;
+    z-index: 10;
+    pointer-events: none;
+}
+
+/* Estilos para el modal de éxito */
+.modal-success .modal-header {
+    background: linear-gradient(135deg, #28a745, #20c997);
+}
+
+/* Mejoras visuales */
+.card {
+    border: none;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+/* Animación suave para actualizaciones de stock */
+.badge {
+    transition: all 0.3s ease;
+}
+
+.pos-product-card {
+    transition: all 0.3s ease;
+}
+</style>
+{% endblock %}
