@@ -101,7 +101,7 @@
                     <hr>
                     <div class="d-flex justify-content-between align-items-center">
                         <strong>Total Entrada:</strong>
-                        <span id="totalMovimiento" class="h5 text-success">$0.00</span>
+                        <span id="totalMovimiento" class="h5 text-success">C$0.00</span>
                     </div>
                     
                     <div class="d-grid gap-2 mt-3">
@@ -189,7 +189,7 @@
                                         <br><small class="text-warning"><i class="bi bi-exclamation-triangle"></i> Stock bajo</small>
                                         {% endif %}
                                     </td>
-                                    <td>${{ "%.2f"|format(producto.Costo_Promedio or 0) }}</td>
+                                    <td>C${{ "%.2f"|format(producto.Costo_Promedio or 0) }}</td>
                                     <td>
                                         <button class="btn btn-sm btn-outline-success" 
                                                 onclick="mostrarModalProducto({{ producto.ID_Producto }}, '{{ producto.Descripcion }}', {{ producto.Existencias_Totales }}, '{{ producto.Abreviatura }}', {{ producto.Costo_Promedio or 0 }})">
@@ -232,7 +232,7 @@
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label for="modalCosto" class="form-label">Costo Unitario ($) *</label>
+                                <label for="modalCosto" class="form-label">Costo Unitario (C$) *</label>
                                 <input type="number" id="modalCosto" class="form-control" 
                                        min="0.01" step="0.01" required>
                             </div>
@@ -240,7 +240,7 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Total</label>
-                        <p class="h5 text-success" id="modalTotal">$0.00</p>
+                        <p class="h5 text-success" id="modalTotal">C$0.00</p>
                     </div>
                 </form>
             </div>
@@ -286,7 +286,7 @@ function mostrarModalProducto(id, nombre, stockActual, unidad, costoPromedio) {
     document.getElementById('modalProductoNombre').textContent = `${nombre} (${unidad})`;
     document.getElementById('modalCantidad').value = '';
     document.getElementById('modalCosto').value = costoPromedio || '';
-    document.getElementById('modalTotal').textContent = '$0.00';
+    document.getElementById('modalTotal').textContent = 'C$0.00';
     
     modalProducto.show();
 }
@@ -295,7 +295,7 @@ function calcularTotalModal() {
     const cantidad = parseFloat(document.getElementById('modalCantidad').value) || 0;
     const costo = parseFloat(document.getElementById('modalCosto').value) || 0;
     const total = cantidad * costo;
-    document.getElementById('modalTotal').textContent = `$${total.toFixed(2)}`;
+    document.getElementById('modalTotal').textContent = `C$${total.toFixed(2)}`;
 }
 
 function agregarDesdeModal() {
@@ -356,7 +356,7 @@ function actualizarListaProductos() {
         btnGuardar.disabled = true;
         totalProductos.textContent = '0';
         totalCantidad.textContent = '0';
-        totalMovimiento.textContent = '$0.00';
+        totalMovimiento.textContent = 'C$0.00';
         contador.textContent = '0';
         return;
     }
@@ -385,7 +385,7 @@ function actualizarListaProductos() {
                            value="${item.costo.toFixed(2)}" min="0.01" step="0.01"
                            onchange="actualizarCosto(${index}, this.value)">
                 </td>
-                <td class="text-success fw-bold">$${item.costo_total.toFixed(2)}</td>
+                <td class="text-success fw-bold">C$${item.costo_total.toFixed(2)}</td>
                 <td>
                     <button class="btn btn-sm btn-outline-danger" onclick="eliminarProducto(${index})">
                         <i class="bi bi-trash"></i>
@@ -399,7 +399,7 @@ function actualizarListaProductos() {
     btnGuardar.disabled = false;
     totalProductos.textContent = productosEntrada.length;
     totalCantidad.textContent = totalUnidades.toFixed(2);
-    totalMovimiento.textContent = `$${totalGeneral.toFixed(2)}`;
+    totalMovimiento.textContent = `C$${totalGeneral.toFixed(2)}`;
     contador.textContent = productosEntrada.length;
 }
 

@@ -47,7 +47,7 @@
                                         <small class="text-muted">{{ producto.Categoria or 'Sin categoría' }}</small>
                                     </p>
                                     <div class="d-flex justify-content-between align-items-center">
-                                        <span class="h5 mb-0 text-primary">${{ "%.2f"|format(producto.Precio_Venta) }}</span>
+                                        <span class="h5 mb-0 text-primary">C${{ "%.2f"|format(producto.Precio_Venta) }}</span>
                                         <span class="badge {% if producto.Stock_Bodega > 0 %}bg-success{% else %}bg-danger{% endif %}">
                                             Stock: {{ producto.Stock_Bodega }}
                                         </span>
@@ -83,7 +83,7 @@
                     <div class="mb-3">
                         <div class="d-flex justify-content-between mb-2">
                             <strong>Total:</strong>
-                            <strong class="h4 text-primary" id="totalVenta">$0.00</strong>
+                            <strong class="h4 text-primary" id="totalVenta">C$0.00</strong>
                         </div>
                     </div>
 
@@ -102,12 +102,12 @@
                     <div class="mb-3" id="efectivoContainer" style="display: none;">
                         <label for="efectivo" class="form-label">Efectivo Recibido</label>
                         <div class="input-group">
-                            <span class="input-group-text">$</span>
+                            <span class="input-group-text">C$</span>
                             <input type="number" id="efectivo" class="form-control" 
                                    step="0.01" min="0" placeholder="0.00">
                         </div>
                         <div id="cambioDisplay" class="mt-2" style="display: none;">
-                            <strong>Cambio: <span class="text-success" id="cambioMonto">$0.00</span></strong>
+                            <strong>Cambio: <span class="text-success" id="cambioMonto">C$0.00</span></strong>
                         </div>
                     </div>
 
@@ -145,8 +145,8 @@
                 <i class="bi bi-check-circle-fill text-success display-4 mb-3"></i>
                 <h4 class="text-success">¡Venta Procesada!</h4>
                 <p class="mb-1"><strong>Factura:</strong> #<span id="modalFacturaId"></span></p>
-                <p class="mb-1"><strong>Total:</strong> $<span id="modalTotal"></span></p>
-                <p class="mb-0"><strong>Cambio:</strong> $<span id="modalCambio"></span></p>
+                <p class="mb-1"><strong>Total:</strong> C$<span id="modalTotal"></span></p>
+                <p class="mb-0"><strong>Cambio:</strong> C$<span id="modalCambio"></span></p>
             </div>
             <div class="modal-footer justify-content-center">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Continuar Vendiendo</button>
@@ -388,7 +388,7 @@ function actualizarCarrito() {
     if (carrito.length === 0) {
         container.innerHTML = '<p class="text-center text-muted mt-5">El carrito está vacío</p>';
         btnProcesar.disabled = true;
-        totalElement.textContent = '$0.00';
+        totalElement.textContent = 'C$0.00';
         
         // Resetear campos relacionados
         document.getElementById('efectivo').value = '';
@@ -406,7 +406,7 @@ function actualizarCarrito() {
                 <div class="d-flex justify-content-between align-items-start">
                     <div class="flex-grow-1 me-2">
                         <strong class="d-block">${item.nombre}</strong>
-                        <small class="text-muted">$${item.precio_venta.toFixed(2)} / ${item.unidad}</small>
+                        <small class="text-muted">C$${item.precio_venta.toFixed(2)} / ${item.unidad}</small>
                     </div>
                     <button class="btn btn-sm btn-outline-danger" onclick="eliminarDelCarrito(${index})">
                         <i class="bi bi-x"></i>
@@ -418,14 +418,14 @@ function actualizarCarrito() {
                         <button class="btn btn-outline-dark" disabled>${item.cantidad}</button>
                         <button class="btn btn-outline-secondary" onclick="cambiarCantidad(${index}, 1)">+</button>
                     </div>
-                    <strong class="text-primary">$${item.subtotal.toFixed(2)}</strong>
+                    <strong class="text-primary">C$${item.subtotal.toFixed(2)}</strong>
                 </div>
             </div>
         `;
     });
     
     container.innerHTML = html;
-    totalElement.textContent = `$${total.toFixed(2)}`;
+    totalElement.textContent = `C$${total.toFixed(2)}`;
     btnProcesar.disabled = false;
     
     // Actualizar cálculo de cambio si hay efectivo

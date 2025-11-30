@@ -68,18 +68,18 @@
                                     <div class="row">
                                         <div class="col-6">
                                             <p class="mb-2"><strong>Efectivo:</strong><br>
-                                                <span class="text-dark">${{ "%.2f"|format(factura.Efectivo) }}</span>
+                                                <span class="text-dark">C${{ "%.2f"|format(factura.Efectivo) }}</span>
                                             </p>
                                         </div>
                                         <div class="col-6">
                                             <p class="mb-2"><strong>Cambio:</strong><br>
-                                                <span class="text-success">${{ "%.2f"|format(factura.Cambio or 0) }}</span>
+                                                <span class="text-success">C${{ "%.2f"|format(factura.Cambio or 0) }}</span>
                                             </p>
                                         </div>
                                     </div>
                                     {% endif %}
                                     <p class="mb-0"><strong>Total Pagado:</strong><br>
-                                        <span class="h5 text-success">${{ "%.2f"|format(factura.Total) }}</span>
+                                        <span class="h5 text-success">C${{ "%.2f"|format(factura.Total) }}</span>
                                     </p>
                                 </div>
                             </div>
@@ -128,9 +128,9 @@
                                                     {{ detalle.Cantidad }}
                                                 </span>
                                             </td>
-                                            <td class="text-end">${{ "%.2f"|format(detalle.Precio_Venta) }}</td>
+                                            <td class="text-end">C${{ "%.2f"|format(detalle.Precio_Venta) }}</td>
                                             <td class="text-end">
-                                                <strong>${{ "%.2f"|format(detalle.Subtotal) }}</strong>
+                                                <strong>C${{ "%.2f"|format(detalle.Subtotal) }}</strong>
                                             </td>
                                         </tr>
                                         {% endfor %}
@@ -139,18 +139,18 @@
                                         <tr>
                                             <td colspan="3" class="border-0"></td>
                                             <td class="text-end border-0"><strong>SUBTOTAL:</strong></td>
-                                            <td class="text-end border-0">${{ "%.2f"|format(factura.Total) }}</td>
+                                            <td class="text-end border-0">C${{ "%.2f"|format(factura.Total) }}</td>
                                         </tr>
                                         <tr>
                                             <td colspan="3" class="border-0"></td>
                                             <td class="text-end border-0"><strong>IVA (0%):</strong></td>
-                                            <td class="text-end border-0">$0.00</td>
+                                            <td class="text-end border-0">C$0.00</td>
                                         </tr>
                                         <tr class="border-top">
                                             <td colspan="3" class="border-0"></td>
                                             <td class="text-end border-0"><h5 class="mb-0">TOTAL:</h5></td>
                                             <td class="text-end border-0">
-                                                <h4 class="mb-0 text-success">${{ "%.2f"|format(factura.Total) }}</h4>
+                                                <h4 class="mb-0 text-success">C${{ "%.2f"|format(factura.Total) }}</h4>
                                             </td>
                                         </tr>
                                     </tfoot>
@@ -181,7 +181,7 @@
                             <div class="card bg-light border-0 text-center">
                                 <div class="card-body py-3">
                                     <h6 class="text-muted mb-1">Producto Más Caro</h6>
-                                    <h6 class="text-success mb-0">${{ "%.2f"|format(detalles|max(attribute='Precio_Venta').Precio_Venta) }}</h6>
+                                    <h6 class="text-success mb-0">C${{ "%.2f"|format(detalles|max(attribute='Precio_Venta').Precio_Venta) }}</h6>
                                 </div>
                             </div>
                         </div>
@@ -189,7 +189,7 @@
                             <div class="card bg-light border-0 text-center">
                                 <div class="card-body py-3">
                                     <h6 class="text-muted mb-1">Promedio por Producto</h6>
-                                    <h6 class="text-warning mb-0">${{ "%.2f"|format(factura.Total / detalles|length) if detalles else 0 }}</h6>
+                                    <h6 class="text-warning mb-0">C${{ "%.2f"|format(factura.Total / detalles|length) if detalles else 0 }}</h6>
                                 </div>
                             </div>
                         </div>

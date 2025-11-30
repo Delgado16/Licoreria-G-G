@@ -88,8 +88,8 @@
                             <div class="col-md-4 mb-3">
                                 <label for="stock_minimo" class="form-label">Stock Mínimo *</label>
                                 <input type="number" class="form-control" id="stock_minimo" name="stock_minimo" 
-                                       min="0" step="1"
-                                       value="{{ producto.get('Stock_Minimo', 5) if producto else '5' }}" required>
+                                       min="0" step="0.01"  <!-- CAMBIO AQUÍ: step="0.01" -->
+                                       value="{{ "%.2f"|format(producto.get('Stock_Minimo', 5)) if producto else '5.00' }}" required>
                             </div>
 
                             {% if not producto %}

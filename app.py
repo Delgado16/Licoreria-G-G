@@ -289,11 +289,12 @@ def producto_editar(id):
             categoria_id = request.form['categoria_id']
             stock_minimo = request.form.get('stock_minimo', 5)
             
-            # Convertir valores numéricos de forma segura
+            # Convertir valores numéricos de forma segura - CORREGIDO
             try:
                 precio_venta = float(precio_venta) if precio_venta else 0.0
                 costo_promedio = float(costo_promedio) if costo_promedio else 0.0
-                stock_minimo = int(stock_minimo) if stock_minimo else 5
+                # CORRECCIÓN: Stock_Minimo es DECIMAL en la BD, usar float no int
+                stock_minimo = float(stock_minimo) if stock_minimo else 5.0
                 unidad_medida = int(unidad_medida)
                 categoria_id = int(categoria_id)
             except (ValueError, TypeError) as e:
@@ -323,7 +324,7 @@ def producto_editar(id):
     try:
         print(f"DEBUG: Cargando datos para producto ID: {id}")
         
-        # Obtener datos del producto (CON filtro por Estado ya que Productos SÍ tiene Estado)
+        # Obtener datos del producto
         cur.execute("SELECT * FROM Productos WHERE ID_Producto = %s AND Estado = 1", (id,))
         producto = cur.fetchone()
         
@@ -352,7 +353,7 @@ def producto_editar(id):
         producto_edit = dict(producto)
         producto_edit['Existencias'] = float(existencias)
         
-        # Obtener categorías y unidades (SIN filtro por Estado ya que NO tienen esa columna)
+        # Obtener categorías y unidades
         cur.execute("SELECT * FROM Categorias ORDER BY Descripcion")
         categorias = cur.fetchall()
         
@@ -364,6 +365,7 @@ def producto_editar(id):
     except Exception as e:
         error_msg = f"Error al cargar el producto: {str(e)}"
         print(f"ERROR: {error_msg}")
+        import traceback
         print(f"TRACEBACK: {traceback.format_exc()}")
         
         flash(error_msg, 'error')
@@ -568,7 +570,7 @@ def ventas():
         productos = cur.fetchall()
         
         # Obtener métodos de pago activos
-        cur.execute("SELECT * FROM Metodos_Pago ORDER BY Nombre")
+        cur.execute("SELECT * FROM Metodos_Pago WHERE Nombre = 'EFECTIVO' ")
         metodos_pago = cur.fetchall()
         
         # Obtener categorías activas para filtros
@@ -618,7 +620,7 @@ def procesar_venta():
         
         cur = mysql.connection.cursor()
         
-        # Verificar stock disponible EN LA BODEGA (CORREGIDO)
+        # Verificar stock disponible EN LA BODEGA
         productos_sin_stock = []
         for item in items:
             producto_id = item['producto_id']
@@ -665,16 +667,19 @@ def procesar_venta():
             mysql.connection.rollback()
             return jsonify({'success': False, 'message': 'Tipo de movimiento para venta no configurado'}), 500
         
+        # GENERAR NÚMERO DE FACTURA CON PREFIJO VTA- PARA VENTAS
+        numero_factura = f"VTA-{factura_id:06d}"  # VTA-000001, VTA-000002
+        
         # Insertar movimiento de inventario para la venta
         cur.execute("""
             INSERT INTO Movimientos_Inventario 
-            (ID_TipoMovimiento, Observacion, ID_Bodega)
-            VALUES (%s, %s, %s)
-        """, (tipo_movimiento_venta['ID_TipoMovimiento'], f"Venta - Factura #{factura_id}", bodega_id))
+            (ID_TipoMovimiento, N_Factura, Observacion, ID_Bodega)
+            VALUES (%s, %s, %s, %s)
+        """, (tipo_movimiento_venta['ID_TipoMovimiento'], numero_factura, f"Venta - Factura #{factura_id}", bodega_id))
         
         movimiento_id = cur.lastrowid
         
-        # Insertar detalles de factura y ACTUALIZAR STOCK (CORREGIDO)
+        # Insertar detalles de factura y ACTUALIZAR STOCK
         for item in items:
             producto_id = item['producto_id']
             cantidad = float(item['cantidad'])
@@ -692,9 +697,9 @@ def procesar_venta():
                 INSERT INTO Detalle_Movimiento_Inventario 
                 (ID_Movimiento, ID_Producto, Cantidad, Costo, Costo_Total)
                 VALUES (%s, %s, %s, %s, %s)
-            """, (movimiento_id, producto_id, cantidad, 0, 0))
+            """, (movimiento_id, producto_id, cantidad, precio_venta, subtotal))
             
-            # ACTUALIZAR INVENTARIO EN BODEGA (CORREGIDO - ELIMINADO Productos.Existencias)
+            # ACTUALIZAR INVENTARIO EN BODEGA
             cur.execute("""
                 SELECT 1 FROM Inventario_Bodega 
                 WHERE ID_Producto = %s AND ID_Bodega = %s
@@ -707,7 +712,6 @@ def procesar_venta():
                     WHERE ID_Producto = %s AND ID_Bodega = %s
                 """, (cantidad, producto_id, bodega_id))
             else:
-                # Esto no debería pasar si verificamos stock antes, pero por seguridad
                 cur.execute("""
                     INSERT INTO Inventario_Bodega (ID_Bodega, ID_Producto, Existencias)
                     VALUES (%s, %s, %s)
@@ -719,6 +723,7 @@ def procesar_venta():
             'success': True, 
             'message': f'Venta procesada exitosamente! Factura #{factura_id}',
             'factura_id': factura_id,
+            'n_factura': numero_factura,
             'total': total,
             'cambio': cambio
         })
@@ -947,12 +952,28 @@ def inventario_entrada():
                 flash('Tipo de movimiento no válido para entrada', 'danger')
                 return jsonify({'success': False, 'message': 'Tipo de movimiento no válido para entrada'}), 400
             
+            # LÓGICA MEJORADA PARA N_FACTURA:
+            # - Si el usuario ingresa una factura de proveedor, usar esa
+            # - Si no ingresa nada, generar automáticamente con prefijo CMP-
+            if n_factura and n_factura.strip():  # Si el usuario ingresó una factura de proveedor
+                numero_factura_final = n_factura.strip()
+                tipo_factura = "factura_proveedor"
+            else:  # Si no hay factura de proveedor, generar número interno
+                cur.execute("""
+                    SELECT MAX(ID_Movimiento) as last_id FROM Movimientos_Inventario 
+                    WHERE N_Factura LIKE 'CMP-%'
+                """)
+                last_mov = cur.fetchone()
+                last_id = last_mov['last_id'] if last_mov['last_id'] else 0
+                numero_factura_final = f"CMP-{(last_id + 1):06d}"
+                tipo_factura = "interno"
+            
             # Insertar movimiento
             cur.execute("""
                 INSERT INTO Movimientos_Inventario 
                 (ID_TipoMovimiento, N_Factura, ID_Proveedor, Observacion, ID_Bodega)
                 VALUES (%s, %s, %s, %s, %s)
-            """, (tipo_movimiento_id, n_factura, proveedor_id, observacion, bodega_id))
+            """, (tipo_movimiento_id, numero_factura_final, proveedor_id, observacion, bodega_id))
             
             movimiento_id = cur.lastrowid
             
@@ -985,7 +1006,7 @@ def inventario_entrada():
                     Existencias = Existencias + VALUES(Existencias)
                 """, (bodega_id, producto_id, cantidad))
                 
-                # ACTUALIZAR COSTO PROMEDIO (CORREGIDO - SIN EXISTENCIAS EN PRODUCTOS)
+                # ACTUALIZAR COSTO PROMEDIO
                 # Primero obtener las existencias totales actuales para calcular el costo promedio
                 cur.execute("""
                     SELECT COALESCE(SUM(Existencias), 0) as Existencias_Totales
@@ -1020,22 +1041,31 @@ def inventario_entrada():
             mysql.connection.commit()
             cur.close()
             
-            flash(f'✅ Entrada de inventario registrada exitosamente! Movimiento #{movimiento_id} - {total_productos} unidades en {bodega_nombre}', 'success')
+            mensaje = f'✅ Entrada registrada! Movimiento #{movimiento_id}'
+            if tipo_factura == "factura_proveedor":
+                mensaje += f' - Factura: {numero_factura_final}'
+            else:
+                mensaje += f' - Ref: {numero_factura_final}'
+            mensaje += f' - {total_productos} unidades en {bodega_nombre}'
+            
+            flash(mensaje, 'success')
             return jsonify({
                 'success': True,
                 'message': 'Entrada de inventario registrada exitosamente',
-                'movimiento_id': movimiento_id
+                'movimiento_id': movimiento_id,
+                'n_factura': numero_factura_final,
+                'tipo_factura': tipo_factura
             })
             
         except Exception as e:
             mysql.connection.rollback()
-            flash(f'❌ Error al registrar entrada de inventario: {str(e)}', 'danger')
+            flash(f'❌ Error al registrar entrada: {str(e)}', 'danger')
             return jsonify({'success': False, 'message': str(e)}), 500
     
     # GET - Cargar datos para el formulario CON EXISTENCIAS DESDE INVENTARIO_BODEGA
     cur = mysql.connection.cursor()
     
-    # Obtener productos con sus existencias desde Inventario_Bodega - CONSULTA CORREGIDA
+    # Obtener productos con sus existencias desde Inventario_Bodega
     cur.execute("""
         SELECT 
             p.ID_Producto,
@@ -1240,39 +1270,47 @@ def inventario_salida():
 @app.route('/inventario/detalle/<int:id>')
 @admin_required
 def inventario_detalle(id):
-    cur = mysql.connection.cursor()
+    try:
+        cur = mysql.connection.cursor()
+        
+        # Obtener movimiento
+        cur.execute("""
+            SELECT mi.*, cm.Descripcion as TipoMovimiento, cm.Adicion, cm.Letra,
+                   p.Nombre as Proveedor, b.Nombre as Bodega
+            FROM Movimientos_Inventario mi
+            INNER JOIN Catalogo_Movimientos cm ON mi.ID_TipoMovimiento = cm.ID_TipoMovimiento
+            LEFT JOIN Proveedores p ON mi.ID_Proveedor = p.ID_Proveedor
+            LEFT JOIN Bodegas b ON mi.ID_Bodega = b.ID_Bodega
+            WHERE mi.ID_Movimiento = %s
+        """, (id,))
+        movimiento = cur.fetchone()
+        
+        if not movimiento:
+            flash('❌ Movimiento no encontrado', 'danger')
+            return redirect(url_for('inventario'))
+        
+        # Obtener detalles
+        cur.execute("""
+            SELECT dmi.*, p.Descripcion as Producto, u.Abreviatura
+            FROM Detalle_Movimiento_Inventario dmi
+            INNER JOIN Productos p ON dmi.ID_Producto = p.ID_Producto
+            LEFT JOIN Unidades_Medida u ON p.Unidad_Medida = u.ID_Unidad
+            WHERE dmi.ID_Movimiento = %s
+            ORDER BY p.Descripcion  -- Agregar ordenamiento
+        """, (id,))
+        detalles = cur.fetchall()
+        
+        cur.close()
+        
+        return render_template('inventario/detalle.html', 
+                               movimiento=movimiento, 
+                               detalles=detalles)
     
-    # Obtener movimiento
-    cur.execute("""
-        SELECT mi.*, cm.Descripcion as TipoMovimiento, cm.Adicion, cm.Letra,
-               p.Nombre as Proveedor, b.Nombre as Bodega
-        FROM Movimientos_Inventario mi
-        INNER JOIN Catalogo_Movimientos cm ON mi.ID_TipoMovimiento = cm.ID_TipoMovimiento
-        LEFT JOIN Proveedores p ON mi.ID_Proveedor = p.ID_Proveedor
-        LEFT JOIN Bodegas b ON mi.ID_Bodega = b.ID_Bodega
-        WHERE mi.ID_Movimiento = %s
-    """, (id,))
-    movimiento = cur.fetchone()
-    
-    if not movimiento:
-        flash('❌ Movimiento no encontrado', 'danger')
+    except Exception as e:
+        if 'cur' in locals():
+            cur.close()
+        flash('❌ Error al cargar el detalle del movimiento', 'danger')
         return redirect(url_for('inventario'))
-    
-    # Obtener detalles
-    cur.execute("""
-        SELECT dmi.*, p.Descripcion as Producto, u.Abreviatura
-        FROM Detalle_Movimiento_Inventario dmi
-        INNER JOIN Productos p ON dmi.ID_Producto = p.ID_Producto
-        LEFT JOIN Unidades_Medida u ON p.Unidad_Medida = u.ID_Unidad
-        WHERE dmi.ID_Movimiento = %s
-    """, (id,))
-    detalles = cur.fetchall()
-    
-    cur.close()
-    
-    return render_template('inventario/detalle.html', 
-                           movimiento=movimiento, 
-                           detalles=detalles)
 
 @app.route('/inventario/reportes')
 @admin_required

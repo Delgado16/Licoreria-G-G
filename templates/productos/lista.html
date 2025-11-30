@@ -47,8 +47,8 @@
                                 </span>
                             </td>
                             <td>{{ "%.2f"|format(producto.Stock_Minimo) }}</td>
-                            <td>${{ "%.2f"|format(producto.Costo_Promedio or 0) }}</td>
-                            <td>${{ "%.2f"|format(producto.Precio_Venta or 0) }}</td>
+                            <td>C${{ "%.2f"|format(producto.Costo_Promedio or 0) }}</td>
+                            <td>C${{ "%.2f"|format(producto.Precio_Venta or 0) }}</td>
                             <td>
                                 {% if producto.Existencias_Totales <= producto.Stock_Minimo %}
                                 <span class="badge bg-warning">Stock Bajo</span>

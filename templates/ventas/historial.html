@@ -85,7 +85,7 @@
                     <div class="d-flex justify-content-between">
                         <div>
                             <h6 class="card-title">Monto Total</h6>
-                            <h3>${{ "%.2f"|format(ventas|sum(attribute='Total')) }}</h3>
+                            <h3>C${{ "%.2f"|format(ventas|sum(attribute='Total')) }}</h3>
                         </div>
                         <div class="align-self-center">
                             <i class="bi bi-currency-dollar fs-1"></i>
@@ -100,7 +100,7 @@
                     <div class="d-flex justify-content-between">
                         <div>
                             <h6 class="card-title">Promedio por Venta</h6>
-                            <h3>${{ "%.2f"|format((ventas|sum(attribute='Total')) / ventas|length) }}</h3>
+                            <h3>C${{ "%.2f"|format((ventas|sum(attribute='Total')) / ventas|length) }}</h3>
                         </div>
                         <div class="align-self-center">
                             <i class="bi bi-graph-up fs-1"></i>
@@ -115,7 +115,7 @@
                     <div class="d-flex justify-content-between">
                         <div>
                             <h6 class="card-title">Venta Más Alta</h6>
-                            <h3>${{ "%.2f"|format(ventas|max(attribute='Total').Total) }}</h3>
+                            <h3>C${{ "%.2f"|format(ventas|max(attribute='Total').Total) }}</h3>
                         </div>
                         <div class="align-self-center">
                             <i class="bi bi-trophy fs-1"></i>
@@ -166,7 +166,7 @@
                                 <small>{{ venta.Hora.strftime('%H:%M') if venta.Hora else 'N/A' }}</small>
                             </td>
                             <td>
-                                <strong class="text-success">${{ "%.2f"|format(venta.Total) }}</strong>
+                                <strong class="text-success">C${{ "%.2f"|format(venta.Total) }}</strong>
                             </td>
                             <td>
                                 <span class="badge 
