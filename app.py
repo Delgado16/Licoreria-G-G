@@ -133,11 +133,16 @@ def dashboard():
     """)
     ventas_mes = cur.fetchone()['total_mes']
     
-    # Productos con stock bajo
+    # Productos con stock bajo - CORREGIDO
     cur.execute("""
-        SELECT ID_Producto, Descripcion, Existencias, Stock_Minimo
-        FROM Productos
-        WHERE Existencias <= Stock_Minimo AND Estado = 1
+        SELECT p.ID_Producto, p.Descripcion, 
+               COALESCE(SUM(ib.Existencias), 0) as Existencias, 
+               p.Stock_Minimo
+        FROM Productos p
+        LEFT JOIN Inventario_Bodega ib ON p.ID_Producto = ib.ID_Producto
+        WHERE p.Estado = 1
+        GROUP BY p.ID_Producto, p.Descripcion, p.Stock_Minimo
+        HAVING COALESCE(SUM(ib.Existencias), 0) <= p.Stock_Minimo
         ORDER BY Existencias ASC
         LIMIT 10
     """)
@@ -190,11 +195,17 @@ def dashboard():
 def productos():
     cur = mysql.connection.cursor()
     cur.execute("""
-        SELECT p.*, c.Descripcion as Categoria, u.Descripcion as Unidad, u.Abreviatura
+        SELECT p.*, 
+               c.Descripcion as Categoria, 
+               u.Descripcion as Unidad, 
+               u.Abreviatura,
+               COALESCE(SUM(ib.Existencias), 0) as Existencias_Totales
         FROM Productos p
         LEFT JOIN Categorias c ON p.Categoria_ID = c.ID_Categoria
         LEFT JOIN Unidades_Medida u ON p.Unidad_Medida = u.ID_Unidad
+        LEFT JOIN Inventario_Bodega ib ON p.ID_Producto = ib.ID_Producto
         WHERE p.Estado = 1
+        GROUP BY p.ID_Producto, c.Descripcion, u.Descripcion, u.Abreviatura
         ORDER BY p.Descripcion
     """)
     productos = cur.fetchall()
@@ -205,27 +216,46 @@ def productos():
 @admin_required
 def producto_nuevo():
     if request.method == 'POST':
-        descripcion = request.form['descripcion']
-        unidad_medida = request.form['unidad_medida']
-        precio_venta = request.form['precio_venta']
-        costo_promedio = request.form.get('costo_promedio', 0)
-        categoria_id = request.form['categoria_id']
-        stock_minimo = request.form.get('stock_minimo', 5)
-        
-        cur = mysql.connection.cursor()
-        cur.execute("""
-            INSERT INTO Productos (Descripcion, Unidad_Medida, Precio_Venta, Costo_Promedio, 
-                                 Categoria_ID, Stock_Minimo, Usuario_Creador)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """, (descripcion, unidad_medida, precio_venta, costo_promedio, categoria_id, 
-              stock_minimo, session['user_id']))
-        mysql.connection.commit()
-        cur.close()
-        
-        flash('Producto creado exitosamente', 'success')
-        return redirect(url_for('productos'))
+        try:
+            descripcion = request.form['descripcion']
+            unidad_medida = request.form['unidad_medida']
+            precio_venta = request.form['precio_venta']
+            costo_promedio = request.form.get('costo_promedio', 0)
+            categoria_id = request.form['categoria_id']
+            stock_minimo = request.form.get('stock_minimo', 5)
+            existencias_iniciales = request.form.get('existencias_iniciales', 0)
+            
+            cur = mysql.connection.cursor()
+            
+            # Insertar producto
+            cur.execute("""
+                INSERT INTO Productos (Descripcion, Unidad_Medida, Precio_Venta, Costo_Promedio, 
+                                     Categoria_ID, Stock_Minimo, Usuario_Creador)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (descripcion, unidad_medida, precio_venta, costo_promedio, categoria_id, 
+                  stock_minimo, session['user_id']))
+            
+            producto_id = cur.lastrowid
+            
+            # Insertar en inventario
+            cur.execute("""
+                INSERT INTO Inventario_Bodega (ID_Bodega, ID_Producto, Existencias)
+                VALUES (1, %s, %s)
+            """, (producto_id, existencias_iniciales))
+            
+            mysql.connection.commit()
+            cur.close()
+            
+            flash('Producto creado exitosamente', 'success')
+            return redirect(url_for('productos'))
+            
+        except Exception as e:
+            if 'cur' in locals():
+                cur.close()
+            flash(f'Error al crear el producto: {str(e)}', 'error')
+            return redirect(url_for('producto_nuevo'))
     
-    # GET - Cargar datos para el formulario
+    # GET request
     cur = mysql.connection.cursor()
     cur.execute("SELECT * FROM Categorias ORDER BY Descripcion")
     categorias = cur.fetchall()
@@ -233,7 +263,9 @@ def producto_nuevo():
     unidades = cur.fetchall()
     cur.close()
     
-    return render_template('productos/form.html', categorias=categorias, unidades=unidades)
+    return render_template('productos/form.html', 
+                         categorias=categorias, 
+                         unidades=unidades)
 
 @app.route('/productos/editar/<int:id>', methods=['GET', 'POST'])
 @admin_required
@@ -248,27 +280,58 @@ def producto_editar(id):
         categoria_id = request.form['categoria_id']
         stock_minimo = request.form.get('stock_minimo', 5)
         
-        cur.execute("""
-            UPDATE Productos 
-            SET Descripcion = %s, Unidad_Medida = %s, Precio_Venta = %s, 
-                Costo_Promedio = %s, Categoria_ID = %s, Stock_Minimo = %s
-            WHERE ID_Producto = %s
-        """, (descripcion, unidad_medida, precio_venta, costo_promedio, 
-              categoria_id, stock_minimo, id))
-        mysql.connection.commit()
-        cur.close()
+        try:
+            cur.execute("""
+                UPDATE Productos 
+                SET Descripcion = %s, Unidad_Medida = %s, Precio_Venta = %s, 
+                    Costo_Promedio = %s, Categoria_ID = %s, Stock_Minimo = %s
+                WHERE ID_Producto = %s
+            """, (descripcion, unidad_medida, precio_venta, costo_promedio, 
+                  categoria_id, stock_minimo, id))
+            mysql.connection.commit()
+            flash('Producto actualizado exitosamente', 'success')
+            
+        except Exception as e:
+            mysql.connection.rollback()
+            flash(f'Error al actualizar el producto: {str(e)}', 'error')
         
-        flash('Producto actualizado exitosamente', 'success')
+        finally:
+            cur.close()
+        
         return redirect(url_for('productos'))
     
-    # GET
-    cur.execute("SELECT * FROM Productos WHERE ID_Producto = %s", (id,))
-    producto = cur.fetchone()
-    cur.execute("SELECT * FROM Categorias ORDER BY Descripcion")
-    categorias = cur.fetchall()
-    cur.execute("SELECT * FROM Unidades_Medida ORDER BY Descripcion")
-    unidades = cur.fetchall()
-    cur.close()
+    # GET - Cargar datos del producto y sus existencias
+    try:
+        # Obtener datos del producto
+        cur.execute("SELECT * FROM Productos WHERE ID_Producto = %s", (id,))
+        producto = cur.fetchone()
+        
+        # Obtener existencias actuales desde Inventario_Bodega
+        cur.execute("""
+            SELECT COALESCE(SUM(Existencias), 0) as Existencias_Totales 
+            FROM Inventario_Bodega 
+            WHERE ID_Producto = %s
+        """, (id,))
+        existencias_result = cur.fetchone()
+        
+        # Agregar las existencias al objeto producto
+        if producto:
+            producto_dict = dict(producto)
+            producto_dict['Existencias'] = existencias_result[0] if existencias_result else 0
+            producto = type('Producto', (), producto_dict)
+        
+        cur.execute("SELECT * FROM Categorias ORDER BY Descripcion")
+        categorias = cur.fetchall()
+        
+        cur.execute("SELECT * FROM Unidades_Medida ORDER BY Descripcion")
+        unidades = cur.fetchall()
+        
+    except Exception as e:
+        flash(f'Error al cargar el producto: {str(e)}', 'error')
+        return redirect(url_for('productos'))
+    
+    finally:
+        cur.close()
     
     return render_template('productos/form.html', producto=producto, 
                          categorias=categorias, unidades=unidades)
@@ -887,16 +950,37 @@ def inventario_entrada():
                     Existencias = Existencias + VALUES(Existencias)
                 """, (bodega_id, producto_id, cantidad))
                 
-                # ACTUALIZAR COSTO PROMEDIO Y EXISTENCIAS TOTALES
+                # ACTUALIZAR COSTO PROMEDIO (CORREGIDO - SIN EXISTENCIAS EN PRODUCTOS)
+                # Primero obtener las existencias totales actuales para calcular el costo promedio
+                cur.execute("""
+                    SELECT COALESCE(SUM(Existencias), 0) as Existencias_Totales
+                    FROM Inventario_Bodega 
+                    WHERE ID_Producto = %s
+                """, (producto_id,))
+                existencias_result = cur.fetchone()
+                existencias_totales = existencias_result['Existencias_Totales'] if existencias_result else 0
+                
+                # Obtener el costo promedio actual
+                cur.execute("SELECT Costo_Promedio FROM Productos WHERE ID_Producto = %s", (producto_id,))
+                producto_actual = cur.fetchone()
+                costo_promedio_actual = producto_actual['Costo_Promedio'] if producto_actual and producto_actual['Costo_Promedio'] else 0
+                
+                # Calcular nuevo costo promedio
+                if existencias_totales > 0:
+                    # Fórmula: (costo_actual * existencias_actuales + costo_nuevo * cantidad_nueva) / (existencias_actuales + cantidad_nueva)
+                    nuevo_costo_promedio = (
+                        (costo_promedio_actual * (existencias_totales - cantidad)) + 
+                        (costo * cantidad)
+                    ) / existencias_totales
+                else:
+                    nuevo_costo_promedio = costo
+                
+                # Actualizar solo el costo promedio en Productos
                 cur.execute("""
                     UPDATE Productos 
-                    SET Existencias = Existencias + %s,
-                        Costo_Promedio = CASE 
-                            WHEN Existencias = 0 THEN %s
-                            ELSE ((Existencias * Costo_Promedio) + (%s * %s)) / (Existencias + %s)
-                        END
+                    SET Costo_Promedio = %s
                     WHERE ID_Producto = %s
-                """, (cantidad, costo, cantidad, costo, cantidad, producto_id))
+                """, (nuevo_costo_promedio, producto_id))
             
             mysql.connection.commit()
             cur.close()
@@ -913,15 +997,43 @@ def inventario_entrada():
             flash(f'❌ Error al registrar entrada de inventario: {str(e)}', 'danger')
             return jsonify({'success': False, 'message': str(e)}), 500
     
-    # GET (mantener igual)
+    # GET - Cargar datos para el formulario CON EXISTENCIAS DESDE INVENTARIO_BODEGA
     cur = mysql.connection.cursor()
     
+    # Obtener productos con sus existencias desde Inventario_Bodega - CONSULTA CORREGIDA
     cur.execute("""
-        SELECT p.*, c.Descripcion as Categoria, u.Abreviatura
+        SELECT 
+            p.ID_Producto,
+            p.Descripcion,
+            p.Unidad_Medida,
+            p.Estado,
+            p.Costo_Promedio,
+            p.Precio_Venta,
+            p.Categoria_ID,
+            p.Fecha_Creacion,
+            p.Usuario_Creador,
+            p.Stock_Minimo,
+            c.Descripcion as Categoria, 
+            u.Abreviatura,
+            COALESCE(SUM(ib.Existencias), 0) as Existencias_Totales
         FROM Productos p
         LEFT JOIN Categorias c ON p.Categoria_ID = c.ID_Categoria
         LEFT JOIN Unidades_Medida u ON p.Unidad_Medida = u.ID_Unidad
+        LEFT JOIN Inventario_Bodega ib ON p.ID_Producto = ib.ID_Producto
         WHERE p.Estado = 1
+        GROUP BY 
+            p.ID_Producto,
+            p.Descripcion,
+            p.Unidad_Medida,
+            p.Estado,
+            p.Costo_Promedio,
+            p.Precio_Venta,
+            p.Categoria_ID,
+            p.Fecha_Creacion,
+            p.Usuario_Creador,
+            p.Stock_Minimo,
+            c.Descripcion,
+            u.Abreviatura
         ORDER BY p.Descripcion
     """)
     productos = cur.fetchall()

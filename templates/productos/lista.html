@@ -42,15 +42,15 @@
                             <td>{{ producto.Categoria or 'Sin categoría' }}</td>
                             <td>{{ producto.Abreviatura }}</td>
                             <td>
-                                <span class="badge {% if producto.Existencias <= producto.Stock_Minimo %}bg-warning{% else %}bg-success{% endif %}">
-                                    {{ producto.Existencias }}
+                                <span class="badge {% if producto.Existencias_Totales <= producto.Stock_Minimo %}bg-warning{% else %}bg-success{% endif %}">
+                                    {{ "%.2f"|format(producto.Existencias_Totales) }}
                                 </span>
                             </td>
-                            <td>{{ producto.Stock_Minimo }}</td>
+                            <td>{{ "%.2f"|format(producto.Stock_Minimo) }}</td>
                             <td>${{ "%.2f"|format(producto.Costo_Promedio or 0) }}</td>
                             <td>${{ "%.2f"|format(producto.Precio_Venta) }}</td>
                             <td>
-                                {% if producto.Existencias <= producto.Stock_Minimo %}
+                                {% if producto.Existencias_Totales <= producto.Stock_Minimo %}
                                 <span class="badge bg-warning">Stock Bajo</span>
                                 {% else %}
                                 <span class="badge bg-success">Normal</span>

@@ -25,18 +25,18 @@
                 </div>
                 <div class="card-body">
                     <form id="formEntrada">
-                <div class="mb-3">
-                    <label for="tipo_movimiento" class="form-label">Tipo de Movimiento *</label>
-                    <select id="tipo_movimiento" class="form-select" required>
-                        <option value="">Seleccionar tipo...</option>
-                        {% for tipo in tipos_movimiento %}
-                        <option value="{{ tipo.ID_TipoMovimiento }}" 
-                                data-adicion="{{ tipo.Adicion }}">  {# Ahora será "ENTRADA" #}
-                            {{ tipo.Descripcion }} ({{ tipo.Letra }})
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
+                        <div class="mb-3">
+                            <label for="tipo_movimiento" class="form-label">Tipo de Movimiento *</label>
+                            <select id="tipo_movimiento" class="form-select" required>
+                                <option value="">Seleccionar tipo...</option>
+                                {% for tipo in tipos_movimiento %}
+                                <option value="{{ tipo.ID_TipoMovimiento }}" 
+                                        data-adicion="{{ tipo.Adicion }}">
+                                    {{ tipo.Descripcion }} ({{ tipo.Letra }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
 
                         <div class="mb-3">
                             <label for="bodega" class="form-label">Bodega Destino *</label>
@@ -182,17 +182,17 @@
                                         <span class="badge bg-light text-dark">{{ producto.Categoria or 'Sin categoría' }}</span>
                                     </td>
                                     <td>
-                                        <span class="badge {% if producto.Existencias <= producto.Stock_Minimo %}bg-warning{% else %}bg-secondary{% endif %}">
-                                            {{ producto.Existencias }} {{ producto.Abreviatura }}
+                                        <span class="badge {% if producto.Existencias_Totales <= producto.Stock_Minimo %}bg-warning{% else %}bg-secondary{% endif %}">
+                                            {{ "%.2f"|format(producto.Existencias_Totales) }} {{ producto.Abreviatura }}
                                         </span>
-                                        {% if producto.Existencias <= producto.Stock_Minimo %}
+                                        {% if producto.Existencias_Totales <= producto.Stock_Minimo %}
                                         <br><small class="text-warning"><i class="bi bi-exclamation-triangle"></i> Stock bajo</small>
                                         {% endif %}
                                     </td>
-                                    <td>${{ producto.Costo_Promedio or '0.00' }}</td>
+                                    <td>${{ "%.2f"|format(producto.Costo_Promedio or 0) }}</td>
                                     <td>
                                         <button class="btn btn-sm btn-outline-success" 
-                                                onclick="mostrarModalProducto({{ producto.ID_Producto }}, '{{ producto.Descripcion }}', {{ producto.Existencias }}, '{{ producto.Abreviatura }}', {{ producto.Costo_Promedio or 0 }})">
+                                                onclick="mostrarModalProducto({{ producto.ID_Producto }}, '{{ producto.Descripcion }}', {{ producto.Existencias_Totales }}, '{{ producto.Abreviatura }}', {{ producto.Costo_Promedio or 0 }})">
                                             <i class="bi bi-plus-lg"></i> Agregar
                                         </button>
                                     </td>
@@ -438,6 +438,14 @@ function limpiarFormulario() {
     actualizarListaProductos();
     document.getElementById('formEntrada').reset();
     document.getElementById('fecha_movimiento').value = new Date().toISOString().split('T')[0];
+    document.getElementById('searchProducto').value = '';
+    
+    // Restablecer búsqueda de productos
+    const rows = document.querySelectorAll('.producto-row');
+    rows.forEach(row => {
+        row.style.display = '';
+    });
+    
     mostrarToast('Formulario limpiado', 'info');
 }
 
@@ -480,9 +488,30 @@ async function guardarEntrada() {
         
         if (data.success) {
             mostrarToast('¡Entrada de inventario registrada exitosamente!', 'success');
+            
+            // Limpiar el formulario para nueva entrada
             setTimeout(() => {
-                window.location.href = '/inventario';
-            }, 2000);
+                productosEntrada = [];
+                actualizarListaProductos();
+                document.getElementById('formEntrada').reset();
+                document.getElementById('fecha_movimiento').value = new Date().toISOString().split('T')[0];
+                document.getElementById('searchProducto').value = '';
+                
+                // Restablecer búsqueda de productos
+                const rows = document.querySelectorAll('.producto-row');
+                rows.forEach(row => {
+                    row.style.display = '';
+                });
+                
+                btnGuardar.disabled = false;
+                btnGuardar.innerHTML = originalText;
+                
+                // Mostrar número de movimiento en el mensaje
+                if (data.movimiento_id) {
+                    mostrarToast(`Entrada #${data.movimiento_id} registrada. Formulario listo para nueva entrada.`, 'success');
+                }
+            }, 1000);
+            
         } else {
             throw new Error(data.message || 'Error al guardar');
         }
@@ -491,6 +520,42 @@ async function guardarEntrada() {
         btnGuardar.disabled = false;
         btnGuardar.innerHTML = originalText;
     }
+}
+
+// Sistema de notificaciones Toast
+function mostrarToast(mensaje, tipo = 'info') {
+    const toastContainer = document.getElementById('toastContainer') || crearToastContainer();
+    
+    const toastId = 'toast-' + Date.now();
+    const toastHtml = `
+        <div id="${toastId}" class="toast align-items-center text-bg-${tipo} border-0" role="alert">
+            <div class="d-flex">
+                <div class="toast-body">
+                    ${mensaje}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    `;
+    
+    toastContainer.innerHTML += toastHtml;
+    const toastElement = document.getElementById(toastId);
+    const toast = new bootstrap.Toast(toastElement);
+    toast.show();
+    
+    // Remover el toast después de que se oculte
+    toastElement.addEventListener('hidden.bs.toast', function() {
+        this.remove();
+    });
+}
+
+function crearToastContainer() {
+    const container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.className = 'toast-container position-fixed top-0 end-0 p-3';
+    container.style.zIndex = '9999';
+    document.body.appendChild(container);
+    return container;
 }
 </script>
 {% endblock %}

@@ -49,12 +49,13 @@
                             </div>
 
                             <div class="col-md-4 mb-3">
-                                <label for="costo_promedio" class="form-label">Costo Promedio</label>
+                                <label for="costo_promedio" class="form-label">Precio de Costo *</label>
                                 <div class="input-group">
                                     <span class="input-group-text">$</span>
                                     <input type="number" class="form-control" id="costo_promedio" name="costo_promedio" 
-                                           step="0.01" min="0" value="{{ producto.Costo_Promedio if producto else '0' }}">
+                                           step="0.01" min="0" value="{{ producto.Costo_Promedio if producto else '0' }}" required>
                                 </div>
+                                <small class="text-muted">Precio de compra del producto</small>
                             </div>
 
                             <div class="col-md-4 mb-3">
@@ -69,13 +70,23 @@
                             <div class="col-md-4 mb-3">
                                 <label for="stock_minimo" class="form-label">Stock Mínimo *</label>
                                 <input type="number" class="form-control" id="stock_minimo" name="stock_minimo" 
-                                       min="0" value="{{ producto.Stock_Minimo if producto else '5' }}" required>
+                                       step="0.01" min="0" value="{{ producto.Stock_Minimo if producto else '5' }}" required>
+                                <small class="text-muted">Cantidad mínima en inventario</small>
                             </div>
 
-                            {% if producto %}
+                            {# CAMPO NUEVO: Existencias iniciales solo para nuevo producto #}
+                            {% if not producto %}
+                            <div class="col-md-6 mb-3">
+                                <label for="existencias_iniciales" class="form-label">Existencias Iniciales *</label>
+                                <input type="number" class="form-control" id="existencias_iniciales" 
+                                       name="existencias_iniciales" step="0.01" min="0" value="0" required>
+                                <small class="text-muted">Cantidad inicial en bodega general</small>
+                            </div>
+                            {% else %}
+                            {# Para edición, mostrar existencias actuales como información #}
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Existencias Actuales</label>
-                                <input type="text" class="form-control" value="{{ producto.Existencias }}" disabled>
+                                <input type="text" class="form-control" value="{{ producto.Existencias if producto.Existencias else '0' }}" disabled>
                                 <small class="text-muted">Las existencias se actualizan con movimientos de inventario</small>
                             </div>
                             {% endif %}
@@ -86,7 +97,7 @@
                                 <i class="bi bi-arrow-left"></i> Cancelar
                             </a>
                             <button type="submit" class="btn btn-primary">
-                                <i class="bi bi-save"></i> Guardar
+                                <i class="bi bi-save"></i> {{ 'Actualizar' if producto else 'Guardar' }}
                             </button>
                         </div>
                     </form>
