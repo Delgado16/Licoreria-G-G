@@ -13,7 +13,7 @@
 
     <!-- Tarjetas de resumen -->
     <div class="row g-4 mb-4">
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="card bg-primary text-white shadow">
                 <div class="card-body">
                     <h6 class="text-uppercase mb-1">Valor Total del Inventario</h6>
@@ -21,7 +21,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="card bg-success text-white shadow">
                 <div class="card-body">
                     <h6 class="text-uppercase mb-1">Productos con Movimiento</h6>
@@ -29,11 +29,19 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="card bg-warning text-white shadow">
                 <div class="card-body">
-                    <h6 class="text-uppercase mb-1">Productos Sin Movimiento (90 días)</h6>
+                    <h6 class="text-uppercase mb-1">Productos Sin Movimiento</h6>
                     <h2 class="mb-0">{{ productos_sin_movimiento|length }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white shadow">
+                <div class="card-body">
+                    <h6 class="text-uppercase mb-1">Productos Stock Bajo</h6>
+                    <h2 class="mb-0">{{ productos_stock_bajo|length }}</h2>
                 </div>
             </div>
         </div>
@@ -63,7 +71,11 @@
                                     <td>{{ producto.Descripcion }}</td>
                                     <td class="text-center"><span class="badge bg-success">{{ producto.Entradas }}</span></td>
                                     <td class="text-center"><span class="badge bg-warning">{{ producto.Salidas }}</span></td>
-                                    <td class="text-center">{{ producto.Existencias }}</td>
+                                    <td class="text-center">
+                                        <span class="badge {% if producto.Existencias <= 0 %}bg-danger{% else %}bg-info{% endif %}">
+                                            {{ producto.Existencias }}
+                                        </span>
+                                    </td>
                                 </tr>
                                 {% else %}
                                 <tr>
@@ -96,7 +108,7 @@
                                 {% for movimiento in movimientos_tipo %}
                                 <tr>
                                     <td>
-                                        <span class="badge {% if movimiento.Letra == 'E' %}bg-success{% elif movimiento.Letra == 'S' %}bg-warning{% else %}bg-info{% endif %}">
+                                        <span class="badge {% if movimiento.Adicion == 'ENTRADA' %}bg-success{% elif movimiento.Adicion == 'SALIDA' %}bg-warning{% else %}bg-info{% endif %}">
                                             {{ movimiento.Letra }}
                                         </span>
                                         {{ movimiento.Descripcion }}
@@ -115,12 +127,53 @@
             </div>
         </div>
 
+        <!-- Productos con stock bajo -->
+        {% if productos_stock_bajo %}
+        <div class="col-md-6">
+            <div class="card shadow border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Productos con Stock Bajo</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Producto</th>
+                                    <th class="text-center">Stock Actual</th>
+                                    <th class="text-center">Stock Mínimo</th>
+                                    <th class="text-center">Diferencia</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for producto in productos_stock_bajo %}
+                                <tr>
+                                    <td>{{ producto.Descripcion }}</td>
+                                    <td class="text-center">
+                                        <span class="badge bg-danger">{{ producto.Existencias }}</span>
+                                    </td>
+                                    <td class="text-center">{{ producto.Stock_Minimo }}</td>
+                                    <td class="text-center">
+                                        <span class="badge {% if producto.Diferencia < 0 %}bg-danger{% else %}bg-warning{% endif %}">
+                                            {{ producto.Diferencia }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Productos sin movimiento -->
         {% if productos_sin_movimiento %}
-        <div class="col-md-12">
+        <div class="col-md-6">
             <div class="card shadow border-warning">
                 <div class="card-header bg-warning text-dark">
-                    <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Productos Sin Movimiento (90 días)</h5>
+                    <h5 class="mb-0"><i class="bi bi-clock-history"></i> Productos Sin Movimiento (90 días)</h5>
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
@@ -136,7 +189,11 @@
                                 {% for producto in productos_sin_movimiento %}
                                 <tr>
                                     <td>{{ producto.Descripcion }}</td>
-                                    <td class="text-center">{{ producto.Existencias }}</td>
+                                    <td class="text-center">
+                                        <span class="badge {% if producto.Existencias <= 0 %}bg-secondary{% else %}bg-info{% endif %}">
+                                            {{ producto.Existencias }}
+                                        </span>
+                                    </td>
                                     <td>{{ producto.Fecha_Creacion.strftime('%d/%m/%Y') }}</td>
                                 </tr>
                                 {% endfor %}

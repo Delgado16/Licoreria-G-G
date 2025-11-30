@@ -14,21 +14,38 @@
                     </h4>
                 </div>
                 <div class="card-body">
+                    <!-- Mostrar mensajes flash -->
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
                     <form method="POST" id="productoForm">
+                        {% if producto %}
+                        <input type="hidden" name="producto_id" value="{{ producto.get('ID_Producto', '') }}">
+                        {% endif %}
+                        
                         <div class="row">
                             <div class="col-md-12 mb-3">
                                 <label for="descripcion" class="form-label">Descripción *</label>
                                 <input type="text" class="form-control" id="descripcion" name="descripcion" 
-                                       value="{{ producto.Descripcion if producto else '' }}" required>
+                                       value="{{ producto.get('Descripcion', '') if producto else '' }}" 
+                                       required maxlength="255">
                             </div>
 
                             <div class="col-md-6 mb-3">
                                 <label for="categoria_id" class="form-label">Categoría *</label>
                                 <select class="form-select" id="categoria_id" name="categoria_id" required>
-                                    <option value="">Seleccionar...</option>
+                                    <option value="">Seleccionar categoría...</option>
                                     {% for categoria in categorias %}
                                     <option value="{{ categoria.ID_Categoria }}" 
-                                            {% if producto and producto.Categoria_ID == categoria.ID_Categoria %}selected{% endif %}>
+                                            {% if producto and producto.get('Categoria_ID') == categoria.ID_Categoria %}selected{% endif %}>
                                         {{ categoria.Descripcion }}
                                     </option>
                                     {% endfor %}
@@ -38,10 +55,10 @@
                             <div class="col-md-6 mb-3">
                                 <label for="unidad_medida" class="form-label">Unidad de Medida *</label>
                                 <select class="form-select" id="unidad_medida" name="unidad_medida" required>
-                                    <option value="">Seleccionar...</option>
+                                    <option value="">Seleccionar unidad...</option>
                                     {% for unidad in unidades %}
                                     <option value="{{ unidad.ID_Unidad }}" 
-                                            {% if producto and producto.Unidad_Medida == unidad.ID_Unidad %}selected{% endif %}>
+                                            {% if producto and producto.get('Unidad_Medida') == unidad.ID_Unidad %}selected{% endif %}>
                                         {{ unidad.Descripcion }} ({{ unidad.Abreviatura }})
                                     </option>
                                     {% endfor %}
@@ -49,13 +66,13 @@
                             </div>
 
                             <div class="col-md-4 mb-3">
-                                <label for="costo_promedio" class="form-label">Precio de Costo *</label>
+                                <label for="costo_promedio" class="form-label">Costo Promedio</label>
                                 <div class="input-group">
                                     <span class="input-group-text">$</span>
                                     <input type="number" class="form-control" id="costo_promedio" name="costo_promedio" 
-                                           step="0.01" min="0" value="{{ producto.Costo_Promedio if producto else '0' }}" required>
+                                           step="0.01" min="0" 
+                                           value="{{ "%.2f"|format(producto.get('Costo_Promedio', 0)) if producto else '0.00' }}">
                                 </div>
-                                <small class="text-muted">Precio de compra del producto</small>
                             </div>
 
                             <div class="col-md-4 mb-3">
@@ -63,30 +80,31 @@
                                 <div class="input-group">
                                     <span class="input-group-text">$</span>
                                     <input type="number" class="form-control" id="precio_venta" name="precio_venta" 
-                                           step="0.01" min="0" value="{{ producto.Precio_Venta if producto else '' }}" required>
+                                           step="0.01" min="0.01" 
+                                           value="{{ "%.2f"|format(producto.get('Precio_Venta', 0)) if producto else '' }}" required>
                                 </div>
                             </div>
 
                             <div class="col-md-4 mb-3">
                                 <label for="stock_minimo" class="form-label">Stock Mínimo *</label>
                                 <input type="number" class="form-control" id="stock_minimo" name="stock_minimo" 
-                                       step="0.01" min="0" value="{{ producto.Stock_Minimo if producto else '5' }}" required>
-                                <small class="text-muted">Cantidad mínima en inventario</small>
+                                       min="0" step="1"
+                                       value="{{ producto.get('Stock_Minimo', 5) if producto else '5' }}" required>
                             </div>
 
-                            {# CAMPO NUEVO: Existencias iniciales solo para nuevo producto #}
                             {% if not producto %}
-                            <div class="col-md-6 mb-3">
-                                <label for="existencias_iniciales" class="form-label">Existencias Iniciales *</label>
-                                <input type="number" class="form-control" id="existencias_iniciales" 
-                                       name="existencias_iniciales" step="0.01" min="0" value="0" required>
-                                <small class="text-muted">Cantidad inicial en bodega general</small>
+                            <div class="col-md-12 mb-3">
+                                <label for="existencias_iniciales" class="form-label">Existencias Iniciales</label>
+                                <input type="number" class="form-control" id="existencias_iniciales" name="existencias_iniciales" 
+                                       min="0" step="0.01" value="0">
+                                <small class="text-muted">Cantidad inicial en inventario</small>
                             </div>
                             {% else %}
-                            {# Para edición, mostrar existencias actuales como información #}
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-12 mb-3">
                                 <label class="form-label">Existencias Actuales</label>
-                                <input type="text" class="form-control" value="{{ producto.Existencias if producto.Existencias else '0' }}" disabled>
+                                <input type="text" class="form-control bg-light" 
+                                       value="{{ "%.2f"|format(producto.get('Existencias', 0)) }}" 
+                                       readonly>
                                 <small class="text-muted">Las existencias se actualizan con movimientos de inventario</small>
                             </div>
                             {% endif %}
@@ -97,7 +115,7 @@
                                 <i class="bi bi-arrow-left"></i> Cancelar
                             </a>
                             <button type="submit" class="btn btn-primary">
-                                <i class="bi bi-save"></i> {{ 'Actualizar' if producto else 'Guardar' }}
+                                <i class="bi bi-save"></i> {{ 'Actualizar' if producto else 'Guardar' }} Producto
                             </button>
                         </div>
                     </form>
@@ -106,4 +124,23 @@
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('productoForm');
+    
+    form.addEventListener('submit', function(e) {
+        const precioVenta = parseFloat(document.getElementById('precio_venta').value);
+        
+        if (precioVenta <= 0 || isNaN(precioVenta)) {
+            e.preventDefault();
+            alert('El precio de venta debe ser mayor a 0');
+            document.getElementById('precio_venta').focus();
+            return false;
+        }
+        
+        return true;
+    });
+});
+</script>
 {% endblock %}

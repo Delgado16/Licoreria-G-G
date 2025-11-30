@@ -48,7 +48,7 @@
                             </td>
                             <td>{{ "%.2f"|format(producto.Stock_Minimo) }}</td>
                             <td>${{ "%.2f"|format(producto.Costo_Promedio or 0) }}</td>
-                            <td>${{ "%.2f"|format(producto.Precio_Venta) }}</td>
+                            <td>${{ "%.2f"|format(producto.Precio_Venta or 0) }}</td>
                             <td>
                                 {% if producto.Existencias_Totales <= producto.Stock_Minimo %}
                                 <span class="badge bg-warning">Stock Bajo</span>
@@ -82,4 +82,33 @@
         </div>
     </div>
 </div>
+
+<script>
+function buscarEnTabla(inputId, tableId) {
+    const input = document.getElementById(inputId);
+    const filter = input.value.toLowerCase();
+    const table = document.getElementById(tableId);
+    const tr = table.getElementsByTagName('tr');
+
+    for (let i = 1; i < tr.length; i++) {
+        const td = tr[i].getElementsByTagName('td');
+        let mostrar = false;
+        
+        for (let j = 0; j < td.length; j++) {
+            if (td[j]) {
+                if (td[j].textContent.toLowerCase().indexOf(filter) > -1) {
+                    mostrar = true;
+                    break;
+                }
+            }
+        }
+        
+        tr[i].style.display = mostrar ? '' : 'none';
+    }
+}
+
+function confirmarEliminacion(mensaje) {
+    return confirm(mensaje);
+}
+</script>
 {% endblock %}

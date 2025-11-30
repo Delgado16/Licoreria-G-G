@@ -37,13 +37,13 @@
                                 <tr class="producto-row">
                                     <td>{{ producto.Descripcion }}</td>
                                     <td>
-                                        <span class="badge {% if producto.Existencias <= producto.Stock_Minimo %}bg-warning{% else %}bg-success{% endif %}">
-                                            {{ producto.Existencias }} {{ producto.Abreviatura }}
+                                        <span class="badge {% if producto.Stock_Bodega <= producto.Stock_Minimo %}bg-warning{% else %}bg-success{% endif %}">
+                                            {{ producto.Stock_Bodega }} {{ producto.Abreviatura }}
                                         </span>
                                     </td>
                                     <td>
                                         <button class="btn btn-sm btn-warning" 
-                                                onclick="agregarProducto({{ producto.ID_Producto }}, '{{ producto.Descripcion }}', {{ producto.Existencias }}, '{{ producto.Abreviatura }}')">
+                                                onclick="mostrarPopupCantidad({{ producto.ID_Producto }}, '{{ producto.Descripcion }}', {{ producto.Stock_Bodega }}, '{{ producto.Abreviatura }}')">
                                             <i class="bi bi-dash"></i>
                                         </button>
                                     </td>
@@ -112,33 +112,288 @@
         </div>
     </div>
 </div>
+
+<!-- Overlay para fondo oscuro -->
+<div id="popupOverlay" class="popup-overlay" style="display: none;"></div>
+
+<!-- Ventana emergente personalizada -->
+<div id="popupCantidad" class="custom-popup" style="display: none;">
+    <div class="popup-header">
+        <h5><i class="bi bi-cart-dash"></i> Cantidad a Retirar</h5>
+        <button type="button" class="popup-close" onclick="cerrarPopup()">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    </div>
+    <div class="popup-body">
+        <div class="producto-info mb-3 p-3 bg-light rounded">
+            <div class="row">
+                <div class="col-8">
+                    <strong id="popupProductoNombre"></strong>
+                </div>
+                <div class="col-4 text-end">
+                    <span class="badge bg-info" id="popupStockDisponible"></span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mb-3">
+            <label for="popupCantidadInput" class="form-label">Cantidad a Retirar *</label>
+            <input type="number" 
+                   class="form-control form-control-lg" 
+                   id="popupCantidadInput" 
+                   min="0.01" 
+                   step="0.01" 
+                   placeholder="0.00"
+                   required>
+            <div class="form-text">Stock máximo disponible: <span id="popupMaxCantidad"></span></div>
+        </div>
+        
+        <div class="cantidad-rapida mt-3">
+            <label class="form-label">Cantidades rápidas:</label>
+            <div class="btn-group w-100" role="group">
+                <button type="button" class="btn btn-outline-secondary" onclick="establecerCantidadRapida(0.25)">0.25</button>
+                <button type="button" class="btn btn-outline-secondary" onclick="establecerCantidadRapida(0.5)">0.5</button>
+                <button type="button" class="btn btn-outline-secondary" onclick="establecerCantidadRapida(1)">1</button>
+                <button type="button" class="btn btn-outline-secondary" onclick="establecerCantidadRapida(5)">5</button>
+            </div>
+        </div>
+    </div>
+    <div class="popup-footer">
+        <button type="button" class="btn btn-secondary" onclick="cerrarPopup()">
+            <i class="bi bi-x-circle"></i> Cancelar
+        </button>
+        <button type="button" class="btn btn-warning" onclick="confirmarCantidad()">
+            <i class="bi bi-check-circle"></i> Agregar Producto
+        </button>
+    </div>
+</div>
+
+<style>
+.popup-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 9998;
+    backdrop-filter: blur(3px);
+}
+
+.custom-popup {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    max-width: 500px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    z-index: 9999;
+    animation: popupAppear 0.3s ease-out;
+}
+
+@keyframes popupAppear {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -60%);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+    }
+}
+
+.popup-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 2px solid #ffc107;
+    background: linear-gradient(135deg, #ffc107, #ffca2c);
+    border-radius: 12px 12px 0 0;
+    color: #212529;
+}
+
+.popup-header h5 {
+    margin: 0;
+    font-weight: 600;
+}
+
+.popup-close {
+    background: none;
+    border: none;
+    font-size: 1.25rem;
+    color: #212529;
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.popup-close:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+.popup-body {
+    padding: 1.5rem;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.popup-footer {
+    display: flex;
+    justify-content: space-between;
+    padding: 1.25rem 1.5rem;
+    border-top: 1px solid #dee2e6;
+    gap: 1rem;
+}
+
+.popup-footer .btn {
+    flex: 1;
+    padding: 0.75rem;
+}
+
+.producto-info {
+    border-left: 4px solid #0d6efd;
+}
+
+.cantidad-rapida .btn-group .btn {
+    padding: 0.5rem;
+}
+
+/* Responsive */
+@media (max-width: 576px) {
+    .custom-popup {
+        width: 95%;
+        margin: 1rem;
+    }
+    
+    .popup-footer {
+        flex-direction: column;
+    }
+}
+</style>
 {% endblock %}
 
 {% block extra_js %}
 <script>
 let productosSalida = [];
+let productoActual = null;
 
-function agregarProducto(id, nombre, stockDisponible, unidad) {
-    const cantidad = prompt(`Cantidad a retirar de "${nombre}" (Disponible: ${stockDisponible}):`, '1');
-    if (!cantidad || cantidad <= 0) return;
+function mostrarPopupCantidad(id, nombre, stockDisponible, unidad) {
+    productoActual = {
+        producto_id: id,
+        nombre: nombre,
+        stock_disponible: stockDisponible,
+        unidad: unidad
+    };
     
-    const cantidadNum = parseFloat(cantidad);
+    // Actualizar contenido del popup
+    document.getElementById('popupProductoNombre').textContent = nombre;
+    document.getElementById('popupStockDisponible').textContent = `${stockDisponible} ${unidad}`;
+    document.getElementById('popupMaxCantidad').textContent = `${stockDisponible} ${unidad}`;
     
-    if (cantidadNum > stockDisponible) {
-        mostrarToast('Cantidad mayor al stock disponible', 'danger');
+    // Resetear campo de cantidad
+    const cantidadInput = document.getElementById('popupCantidadInput');
+    cantidadInput.value = '';
+    cantidadInput.max = stockDisponible;
+    
+    // Mostrar popup y overlay
+    document.getElementById('popupOverlay').style.display = 'block';
+    document.getElementById('popupCantidad').style.display = 'block';
+    
+    // Enfocar el campo de cantidad
+    setTimeout(() => {
+        cantidadInput.focus();
+    }, 100);
+    
+    // Agregar evento para tecla Escape
+    document.addEventListener('keydown', manejarTecladoPopup);
+}
+
+function cerrarPopup() {
+    document.getElementById('popupOverlay').style.display = 'none';
+    document.getElementById('popupCantidad').style.display = 'none';
+    document.removeEventListener('keydown', manejarTecladoPopup);
+    productoActual = null;
+}
+
+function manejarTecladoPopup(e) {
+    if (e.key === 'Escape') {
+        cerrarPopup();
+    } else if (e.key === 'Enter') {
+        confirmarCantidad();
+    }
+}
+
+function establecerCantidadRapida(cantidad) {
+    const input = document.getElementById('popupCantidadInput');
+    const max = parseFloat(input.max);
+    
+    if (cantidad <= max) {
+        input.value = cantidad;
+    } else {
+        input.value = max;
+        mostrarToast('La cantidad no puede ser mayor al stock disponible', 'warning');
+    }
+    input.focus();
+}
+
+function confirmarCantidad() {
+    const cantidadInput = document.getElementById('popupCantidadInput');
+    const cantidad = parseFloat(cantidadInput.value);
+    
+    if (!cantidad || cantidad <= 0) {
+        mostrarToast('Ingrese una cantidad válida', 'warning');
+        cantidadInput.focus();
         return;
     }
     
-    productosSalida.push({
-        producto_id: id,
-        nombre: nombre,
-        cantidad: cantidadNum,
-        stock_disponible: stockDisponible,
-        unidad: unidad
-    });
+    if (cantidad > productoActual.stock_disponible) {
+        mostrarToast('Cantidad mayor al stock disponible', 'danger');
+        cantidadInput.focus();
+        return;
+    }
+    
+    // Verificar si el producto ya está en la lista
+    const indexExistente = productosSalida.findIndex(item => item.producto_id === productoActual.producto_id);
+    
+    if (indexExistente !== -1) {
+        // Si ya existe, preguntar si quiere reemplazar o sumar
+        if (confirmarReemplazo(productoActual.nombre)) {
+            productosSalida[indexExistente].cantidad = cantidad;
+        } else {
+            // Sumar a la cantidad existente
+            const nuevaCantidad = productosSalida[indexExistente].cantidad + cantidad;
+            
+            if (nuevaCantidad > productoActual.stock_disponible) {
+                mostrarToast('La cantidad total excede el stock disponible', 'danger');
+                productosSalida[indexExistente].cantidad = productoActual.stock_disponible;
+            } else {
+                productosSalida[indexExistente].cantidad = nuevaCantidad;
+            }
+        }
+    } else {
+        // Agregar nuevo producto
+        productosSalida.push({
+            producto_id: productoActual.producto_id,
+            nombre: productoActual.nombre,
+            cantidad: cantidad,
+            stock_disponible: productoActual.stock_disponible,
+            unidad: productoActual.unidad
+        });
+    }
     
     actualizarListaProductos();
-    mostrarToast('Producto agregado', 'success');
+    mostrarToast('Producto agregado correctamente', 'success');
+    cerrarPopup();
+}
+
+function confirmarReemplazo(nombreProducto) {
+    // Crear un popup de confirmación personalizado
+    return confirm(`El producto "${nombreProducto}" ya está en la lista. ¿Desea reemplazar la cantidad anterior?`);
 }
 
 function actualizarListaProductos() {
@@ -152,14 +407,17 @@ function actualizarListaProductos() {
     }
     
     let html = '';
+    let totalProductos = 0;
+    
     productosSalida.forEach((item, index) => {
+        totalProductos += item.cantidad;
         html += `
             <div class="border-bottom pb-2 mb-2">
                 <div class="d-flex justify-content-between align-items-start">
                     <div class="flex-grow-1">
                         <strong>${item.nombre}</strong><br>
                         <small>Cantidad: ${item.cantidad} ${item.unidad}</small><br>
-                        <small class="text-muted">Disponible: ${item.stock_disponible}</small>
+                        <small class="text-muted">Disponible: ${item.stock_disponible} ${item.unidad}</small>
                     </div>
                     <button class="btn btn-sm btn-outline-danger" onclick="eliminarProducto(${index})">
                         <i class="bi bi-x"></i>
@@ -168,6 +426,14 @@ function actualizarListaProductos() {
             </div>
         `;
     });
+    
+    // Agregar resumen
+    html = `
+        <div class="alert alert-info py-2 mb-2">
+            <small><strong>Total productos:</strong> ${productosSalida.length} | <strong>Total unidades:</strong> ${totalProductos}</small>
+        </div>
+        ${html}
+    `;
     
     container.innerHTML = html;
     btnGuardar.disabled = false;
@@ -179,7 +445,7 @@ function eliminarProducto(index) {
 }
 
 function limpiarFormulario() {
-    if (productosSalida.length > 0 && !confirm('¿Limpiar el formulario?')) return;
+    if (productosSalida.length > 0 && !confirm('¿Está seguro de que desea limpiar el formulario? Se perderán todos los productos agregados.')) return;
     
     productosSalida = [];
     actualizarListaProductos();
@@ -192,18 +458,18 @@ async function guardarSalida() {
     const observacion = document.getElementById('observacion').value;
     
     if (!tipoMovimiento || !bodega || !observacion) {
-        mostrarToast('Completa todos los campos requeridos', 'warning');
+        mostrarToast('Complete todos los campos requeridos', 'warning');
         return;
     }
     
     if (productosSalida.length === 0) {
-        mostrarToast('Agrega al menos un producto', 'warning');
+        mostrarToast('Agregue al menos un producto', 'warning');
         return;
     }
     
     const btnGuardar = document.getElementById('btnGuardar');
     btnGuardar.disabled = true;
-    btnGuardar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...';
+    btnGuardar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Procesando...';
     
     try {
         const response = await fetch('/inventario/salida', {
@@ -220,17 +486,17 @@ async function guardarSalida() {
         const data = await response.json();
         
         if (data.success) {
-            mostrarToast('Salida registrada exitosamente', 'success');
+            mostrarToast('Salida de inventario registrada exitosamente', 'success');
             setTimeout(() => {
                 window.location.href = '/inventario/detalle/' + data.movimiento_id;
             }, 1500);
         } else {
-            mostrarToast(data.message || 'Error al guardar', 'danger');
+            mostrarToast(data.message || 'Error al procesar la salida', 'danger');
             btnGuardar.disabled = false;
             btnGuardar.innerHTML = '<i class="bi bi-save"></i> Guardar Salida';
         }
     } catch (error) {
-        mostrarToast('Error de conexión', 'danger');
+        mostrarToast('Error de conexión con el servidor', 'danger');
         btnGuardar.disabled = false;
         btnGuardar.innerHTML = '<i class="bi bi-save"></i> Guardar Salida';
     }
@@ -246,5 +512,34 @@ document.getElementById('searchProducto').addEventListener('input', function() {
         row.style.display = text.includes(searchTerm) ? '' : 'none';
     });
 });
+
+// Cerrar popup haciendo clic en el overlay
+document.getElementById('popupOverlay').addEventListener('click', cerrarPopup);
+
+// Función para mostrar notificaciones
+function mostrarToast(mensaje, tipo = 'info') {
+    const alertClass = {
+        'success': 'alert-success',
+        'warning': 'alert-warning', 
+        'danger': 'alert-danger',
+        'info': 'alert-info'
+    }[tipo] || 'alert-info';
+    
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 10000; min-width: 300px;';
+    alertDiv.innerHTML = `
+        ${mensaje}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(alertDiv);
+    
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 4000);
+}
 </script>
 {% endblock %}

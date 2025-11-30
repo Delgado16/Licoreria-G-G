@@ -4,6 +4,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from datetime import datetime, timedelta
 import os
+import traceback
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'tu-clave-secreta-super-segura-cambiar-en-produccion')
@@ -196,16 +197,16 @@ def productos():
     cur = mysql.connection.cursor()
     cur.execute("""
         SELECT p.*, 
-               c.Descripcion as Categoria, 
-               u.Descripcion as Unidad, 
+               c.Descripcion as Categoria,  
+               u.Descripcion as Unidad,     
                u.Abreviatura,
                COALESCE(SUM(ib.Existencias), 0) as Existencias_Totales
-        FROM Productos p
-        LEFT JOIN Categorias c ON p.Categoria_ID = c.ID_Categoria
-        LEFT JOIN Unidades_Medida u ON p.Unidad_Medida = u.ID_Unidad
-        LEFT JOIN Inventario_Bodega ib ON p.ID_Producto = ib.ID_Producto
+        FROM productos p                
+        LEFT JOIN categorias c ON p.Categoria_ID = c.ID_Categoria  
+        LEFT JOIN unidades_medida u ON p.Unidad_Medida = u.ID_Unidad  
+        LEFT JOIN inventario_bodega ib ON p.ID_Producto = ib.ID_Producto 
         WHERE p.Estado = 1
-        GROUP BY p.ID_Producto, c.Descripcion, u.Descripcion, u.Abreviatura
+        GROUP BY p.ID_Producto, c.Descripcion, u.Descripcion, u.Abreviatura  
         ORDER BY p.Descripcion
     """)
     productos = cur.fetchall()
@@ -270,17 +271,35 @@ def producto_nuevo():
 @app.route('/productos/editar/<int:id>', methods=['GET', 'POST'])
 @admin_required
 def producto_editar(id):
+    # Validación crítica del ID
+    if id <= 0:
+        flash('ID de producto inválido', 'error')
+        return redirect(url_for('productos'))
+    
+    print(f"DEBUG: Editando producto ID: {id}")
+    
     cur = mysql.connection.cursor()
     
     if request.method == 'POST':
-        descripcion = request.form['descripcion']
-        unidad_medida = request.form['unidad_medida']
-        precio_venta = request.form['precio_venta']
-        costo_promedio = request.form.get('costo_promedio', 0)
-        categoria_id = request.form['categoria_id']
-        stock_minimo = request.form.get('stock_minimo', 5)
-        
         try:
+            descripcion = request.form['descripcion']
+            unidad_medida = request.form['unidad_medida']
+            precio_venta = request.form['precio_venta']
+            costo_promedio = request.form.get('costo_promedio', 0)
+            categoria_id = request.form['categoria_id']
+            stock_minimo = request.form.get('stock_minimo', 5)
+            
+            # Convertir valores numéricos de forma segura
+            try:
+                precio_venta = float(precio_venta) if precio_venta else 0.0
+                costo_promedio = float(costo_promedio) if costo_promedio else 0.0
+                stock_minimo = int(stock_minimo) if stock_minimo else 5
+                unidad_medida = int(unidad_medida)
+                categoria_id = int(categoria_id)
+            except (ValueError, TypeError) as e:
+                flash('Error en los datos numéricos: ' + str(e), 'error')
+                return redirect(url_for('producto_editar', id=id))
+            
             cur.execute("""
                 UPDATE Productos 
                 SET Descripcion = %s, Unidad_Medida = %s, Precio_Venta = %s, 
@@ -300,41 +319,63 @@ def producto_editar(id):
         
         return redirect(url_for('productos'))
     
-    # GET - Cargar datos del producto y sus existencias
+    # GET - Cargar datos del producto
     try:
-        # Obtener datos del producto
-        cur.execute("SELECT * FROM Productos WHERE ID_Producto = %s", (id,))
+        print(f"DEBUG: Cargando datos para producto ID: {id}")
+        
+        # Obtener datos del producto (CON filtro por Estado ya que Productos SÍ tiene Estado)
+        cur.execute("SELECT * FROM Productos WHERE ID_Producto = %s AND Estado = 1", (id,))
         producto = cur.fetchone()
         
-        # Obtener existencias actuales desde Inventario_Bodega
+        print(f"DEBUG: Producto encontrado: {producto}")
+        
+        # Validar que el producto existe
+        if not producto:
+            flash('Producto no encontrado', 'error')
+            cur.close()
+            return redirect(url_for('productos'))
+        
+        # Obtener existencias actuales
         cur.execute("""
-            SELECT COALESCE(SUM(Existencias), 0) as Existencias_Totales 
+            SELECT COALESCE(SUM(Existencias), 0) as Existencias 
             FROM Inventario_Bodega 
             WHERE ID_Producto = %s
         """, (id,))
-        existencias_result = cur.fetchone()
+        existencias_data = cur.fetchone()
         
-        # Agregar las existencias al objeto producto
-        if producto:
-            producto_dict = dict(producto)
-            producto_dict['Existencias'] = existencias_result[0] if existencias_result else 0
-            producto = type('Producto', (), producto_dict)
+        # Extraer existencias del diccionario
+        existencias = existencias_data.get('Existencias', 0) if existencias_data else 0
         
+        print(f"DEBUG: Existencias: {existencias}")
+        
+        # Crear copia del diccionario del producto y agregar existencias
+        producto_edit = dict(producto)
+        producto_edit['Existencias'] = float(existencias)
+        
+        # Obtener categorías y unidades (SIN filtro por Estado ya que NO tienen esa columna)
         cur.execute("SELECT * FROM Categorias ORDER BY Descripcion")
         categorias = cur.fetchall()
         
         cur.execute("SELECT * FROM Unidades_Medida ORDER BY Descripcion")
         unidades = cur.fetchall()
         
+        print(f"DEBUG: Categorías: {len(categorias)}, Unidades: {len(unidades)}")
+        
     except Exception as e:
-        flash(f'Error al cargar el producto: {str(e)}', 'error')
+        error_msg = f"Error al cargar el producto: {str(e)}"
+        print(f"ERROR: {error_msg}")
+        print(f"TRACEBACK: {traceback.format_exc()}")
+        
+        flash(error_msg, 'error')
         return redirect(url_for('productos'))
     
     finally:
         cur.close()
     
-    return render_template('productos/form.html', producto=producto, 
-                         categorias=categorias, unidades=unidades)
+    return render_template('productos/form.html', 
+                         producto=producto_edit, 
+                         categorias=categorias, 
+                         unidades=unidades)
 
 @app.route('/productos/eliminar/<int:id>', methods=['POST'])
 @admin_required
@@ -513,7 +554,7 @@ def ventas():
     cur = mysql.connection.cursor()
     
     try:
-        # Obtener productos activos con stock (corregido para tu estructura)
+        # Obtener productos activos con stock (CORREGIDO)
         cur.execute("""
             SELECT p.*, c.Descripcion as Categoria, u.Abreviatura,
                    COALESCE(ib.Existencias, 0) as Stock_Bodega
@@ -521,7 +562,7 @@ def ventas():
             LEFT JOIN Categorias c ON p.Categoria_ID = c.ID_Categoria
             LEFT JOIN Unidades_Medida u ON p.Unidad_Medida = u.ID_Unidad
             LEFT JOIN Inventario_Bodega ib ON p.ID_Producto = ib.ID_Producto AND ib.ID_Bodega = 1
-            WHERE p.Estado = 1 AND (p.Existencias > 0 OR ib.Existencias > 0)
+            WHERE p.Estado = 1 AND COALESCE(ib.Existencias, 0) > 0
             ORDER BY p.Descripcion
         """)
         productos = cur.fetchall()
@@ -577,7 +618,7 @@ def procesar_venta():
         
         cur = mysql.connection.cursor()
         
-        # Verificar stock disponible EN LA BODEGA (corregido)
+        # Verificar stock disponible EN LA BODEGA (CORREGIDO)
         productos_sin_stock = []
         for item in items:
             producto_id = item['producto_id']
@@ -604,7 +645,7 @@ def procesar_venta():
             mensaje_error = "Stock insuficiente: " + ", ".join(productos_sin_stock)
             return jsonify({'success': False, 'message': mensaje_error}), 400
         
-        # Insertar factura (corregido para tu estructura)
+        # Insertar factura
         cur.execute("""
             INSERT INTO Facturacion (Total, Efectivo, Cambio, ID_MetodoPago, Observacion, ID_Usuario)
             VALUES (%s, %s, %s, %s, %s, %s)
@@ -612,7 +653,7 @@ def procesar_venta():
         
         factura_id = cur.lastrowid
         
-        # Obtener ID del tipo de movimiento para venta (corregido)
+        # Obtener ID del tipo de movimiento para venta
         cur.execute("""
             SELECT ID_TipoMovimiento 
             FROM Catalogo_Movimientos 
@@ -633,7 +674,7 @@ def procesar_venta():
         
         movimiento_id = cur.lastrowid
         
-        # Insertar detalles de factura y ACTUALIZAR STOCK
+        # Insertar detalles de factura y ACTUALIZAR STOCK (CORREGIDO)
         for item in items:
             producto_id = item['producto_id']
             cantidad = float(item['cantidad'])
@@ -646,21 +687,14 @@ def procesar_venta():
                 VALUES (%s, %s, %s, %s, %s)
             """, (factura_id, producto_id, cantidad, precio_venta, subtotal))
             
-            # Insertar detalle en movimiento de inventario (corregido tipo de datos)
+            # Insertar detalle en movimiento de inventario
             cur.execute("""
                 INSERT INTO Detalle_Movimiento_Inventario 
                 (ID_Movimiento, ID_Producto, Cantidad, Costo, Costo_Total)
                 VALUES (%s, %s, %s, %s, %s)
             """, (movimiento_id, producto_id, cantidad, 0, 0))
             
-            # ACTUALIZAR STOCK EN PRODUCTOS
-            cur.execute("""
-                UPDATE Productos 
-                SET Existencias = Existencias - %s
-                WHERE ID_Producto = %s
-            """, (cantidad, producto_id))
-            
-            # ACTUALIZAR INVENTARIO EN BODEGA (manejar INSERT si no existe)
+            # ACTUALIZAR INVENTARIO EN BODEGA (CORREGIDO - ELIMINADO Productos.Existencias)
             cur.execute("""
                 SELECT 1 FROM Inventario_Bodega 
                 WHERE ID_Producto = %s AND ID_Bodega = %s
@@ -673,6 +707,7 @@ def procesar_venta():
                     WHERE ID_Producto = %s AND ID_Bodega = %s
                 """, (cantidad, producto_id, bodega_id))
             else:
+                # Esto no debería pasar si verificamos stock antes, pero por seguridad
                 cur.execute("""
                     INSERT INTO Inventario_Bodega (ID_Bodega, ID_Producto, Existencias)
                     VALUES (%s, %s, %s)
@@ -813,7 +848,7 @@ def buscar_productos():
             LEFT JOIN Categorias c ON p.Categoria_ID = c.ID_Categoria
             LEFT JOIN Unidades_Medida u ON p.Unidad_Medida = u.ID_Unidad
             LEFT JOIN Inventario_Bodega ib ON p.ID_Producto = ib.ID_Producto AND ib.ID_Bodega = %s
-            WHERE p.Estado = 1 AND (p.Existencias > 0 OR ib.Existencias > 0)
+            WHERE p.Estado = 1 AND COALESCE(ib.Existencias, 0) > 0
         """
         params = [bodega_id]
         
@@ -1084,7 +1119,7 @@ def inventario_salida():
             cur.execute("SELECT Nombre FROM Bodegas WHERE ID_Bodega = %s", (bodega_id,))
             bodega_nombre = cur.fetchone()['Nombre']
             
-            # Verificar stock disponible EN LA BODEGA ESPECÍFICA
+            # Verificar stock disponible EN LA BODEGA ESPECÍFICA - CORREGIDO
             productos_sin_stock = []
             for item in items:
                 cur.execute("""
@@ -1122,7 +1157,7 @@ def inventario_salida():
             
             movimiento_id = cur.lastrowid
             
-            # Insertar detalles y ACTUALIZAR INVENTARIO
+            # Insertar detalles y ACTUALIZAR INVENTARIO - CORREGIDO
             total_productos = 0
             for item in items:
                 producto_id = item['producto_id']
@@ -1139,19 +1174,25 @@ def inventario_salida():
                     VALUES (%s, %s, %s, %s, %s)
                 """, (movimiento_id, producto_id, cantidad, costo, costo_total))
                 
-                # ACTUALIZAR INVENTARIO EN BODEGA
+                # ACTUALIZAR INVENTARIO EN BODEGA - CORREGIDO (manejar si no existe)
                 cur.execute("""
-                    UPDATE Inventario_Bodega 
-                    SET Existencias = Existencias - %s
+                    SELECT 1 FROM Inventario_Bodega 
                     WHERE ID_Bodega = %s AND ID_Producto = %s
-                """, (cantidad, bodega_id, producto_id))
+                """, (bodega_id, producto_id))
                 
-                # ACTUALIZAR EXISTENCIAS TOTALES EN PRODUCTOS
-                cur.execute("""
-                    UPDATE Productos 
-                    SET Existencias = Existencias - %s
-                    WHERE ID_Producto = %s
-                """, (cantidad, producto_id))
+                if cur.fetchone():
+                    # Si existe, actualizar
+                    cur.execute("""
+                        UPDATE Inventario_Bodega 
+                        SET Existencias = Existencias - %s
+                        WHERE ID_Bodega = %s AND ID_Producto = %s
+                    """, (cantidad, bodega_id, producto_id))
+                else:
+                    # Si no existe, insertar con existencias negativas (esto no debería pasar si verificamos stock)
+                    cur.execute("""
+                        INSERT INTO Inventario_Bodega (ID_Bodega, ID_Producto, Existencias)
+                        VALUES (%s, %s, %s)
+                    """, (bodega_id, producto_id, -cantidad))
             
             mysql.connection.commit()
             cur.close()
@@ -1168,7 +1209,7 @@ def inventario_salida():
             flash(f'❌ Error al registrar salida de inventario: {str(e)}', 'danger')
             return jsonify({'success': False, 'message': str(e)}), 500
     
-    # GET (mantener igual)
+    # GET - CORREGIDO
     cur = mysql.connection.cursor()
     
     cur.execute("""
@@ -1178,7 +1219,7 @@ def inventario_salida():
         LEFT JOIN Categorias c ON p.Categoria_ID = c.ID_Categoria
         LEFT JOIN Unidades_Medida u ON p.Unidad_Medida = u.ID_Unidad
         LEFT JOIN Inventario_Bodega ib ON p.ID_Producto = ib.ID_Producto
-        WHERE p.Estado = 1 AND p.Existencias > 0
+        WHERE p.Estado = 1 AND COALESCE(ib.Existencias, 0) > 0  -- CORREGIDO: usar Stock_Bodega en lugar de Existencias
         ORDER BY p.Descripcion
     """)
     productos = cur.fetchall()
@@ -1239,24 +1280,25 @@ def reportes():
     cur = mysql.connection.cursor()
     
     try:
-        # Productos con más movimientos
+        # Productos con más movimientos - CORREGIDO
         cur.execute("""
             SELECT p.Descripcion, 
                    SUM(CASE WHEN cm.Adicion = 'ENTRADA' THEN dmi.Cantidad ELSE 0 END) as Entradas,
                    SUM(CASE WHEN cm.Adicion = 'SALIDA' THEN dmi.Cantidad ELSE 0 END) as Salidas,
-                   p.Existencias
+                   COALESCE(SUM(ib.Existencias), 0) as Existencias
             FROM Detalle_Movimiento_Inventario dmi
             INNER JOIN Productos p ON dmi.ID_Producto = p.ID_Producto
             INNER JOIN Movimientos_Inventario mi ON dmi.ID_Movimiento = mi.ID_Movimiento
             INNER JOIN Catalogo_Movimientos cm ON mi.ID_TipoMovimiento = cm.ID_TipoMovimiento
+            LEFT JOIN Inventario_Bodega ib ON p.ID_Producto = ib.ID_Producto
             WHERE mi.Fecha >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
-            GROUP BY p.ID_Producto, p.Descripcion, p.Existencias
+            GROUP BY p.ID_Producto, p.Descripcion
             ORDER BY (Entradas + Salidas) DESC
             LIMIT 10
         """)
         productos_movimientos = cur.fetchall()
         
-        # Movimientos por tipo
+        # Movimientos por tipo (esta consulta está bien)
         cur.execute("""
             SELECT cm.Descripcion, COUNT(*) as Total, cm.Letra, cm.Adicion
             FROM Movimientos_Inventario mi
@@ -1267,18 +1309,22 @@ def reportes():
         """)
         movimientos_tipo = cur.fetchall()
         
-        # Valor del inventario
+        # Valor del inventario - CORREGIDO
         cur.execute("""
-            SELECT SUM(Existencias * Costo_Promedio) as ValorTotal
-            FROM Productos
-            WHERE Estado = 1
+            SELECT SUM(COALESCE(ib.Existencias, 0) * p.Costo_Promedio) as ValorTotal
+            FROM Productos p
+            LEFT JOIN Inventario_Bodega ib ON p.ID_Producto = ib.ID_Producto
+            WHERE p.Estado = 1
         """)
         valor_inventario = cur.fetchone()['ValorTotal'] or 0
         
-        # Productos sin movimiento
+        # Productos sin movimiento - CORREGIDO
         cur.execute("""
-            SELECT p.Descripcion, p.Existencias, p.Fecha_Creacion
+            SELECT p.Descripcion, 
+                   COALESCE(SUM(ib.Existencias), 0) as Existencias, 
+                   p.Fecha_Creacion
             FROM Productos p
+            LEFT JOIN Inventario_Bodega ib ON p.ID_Producto = ib.ID_Producto
             WHERE p.Estado = 1
             AND NOT EXISTS (
                 SELECT 1 FROM Detalle_Movimiento_Inventario dmi
@@ -1286,17 +1332,23 @@ def reportes():
                 WHERE dmi.ID_Producto = p.ID_Producto
                 AND mi.Fecha >= DATE_SUB(CURDATE(), INTERVAL 90 DAY)
             )
+            GROUP BY p.ID_Producto, p.Descripcion, p.Fecha_Creacion
             ORDER BY p.Fecha_Creacion DESC
             LIMIT 10
         """)
         productos_sin_movimiento = cur.fetchall()
         
-        # Productos con stock bajo
+        # Productos con stock bajo - CORREGIDO
         cur.execute("""
-            SELECT p.Descripcion, p.Existencias, p.Stock_Minimo, 
-                   (p.Existencias - p.Stock_Minimo) as Diferencia
+            SELECT p.Descripcion, 
+                   COALESCE(SUM(ib.Existencias), 0) as Existencias, 
+                   p.Stock_Minimo,
+                   (COALESCE(SUM(ib.Existencias), 0) - p.Stock_Minimo) as Diferencia
             FROM Productos p
-            WHERE p.Estado = 1 AND p.Existencias <= p.Stock_Minimo
+            LEFT JOIN Inventario_Bodega ib ON p.ID_Producto = ib.ID_Producto
+            WHERE p.Estado = 1
+            GROUP BY p.ID_Producto, p.Descripcion, p.Stock_Minimo
+            HAVING COALESCE(SUM(ib.Existencias), 0) <= p.Stock_Minimo
             ORDER BY Diferencia ASC
             LIMIT 10
         """)
