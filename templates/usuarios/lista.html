@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}Usuarios - Licoreria G&G{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="bi bi-people"></i> Gestión de Usuarios</h1>
+        <a href="{{ url_for('crear_usuario') }}" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> Nuevo Usuario
+        </a>
+    </div>
+
+    <!-- Mensajes flash -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="card shadow">
+        <div class="card-body">
+            <div class="mb-3">
+                <input type="text" id="searchInput" class="form-control" 
+                       placeholder="Buscar usuarios..." onkeyup="buscarEnTabla('searchInput', 'usuariosTable')">
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover" id="usuariosTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Usuario</th>
+                            <th>Rol</th>
+                            <th>Estado</th>
+                            <th>Fecha Creación</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for usuario in usuarios %}
+                        <tr>
+                            <td>{{ usuario.ID_Usuario }}</td>
+                            <td>{{ usuario.NombreUsuario }}</td>
+                            <td>{{ usuario.Nombre_Rol }}</td>
+                            <td>
+                                {% if usuario.Estado %}
+                                    <span class="badge bg-success">Activo</span>
+                                {% else %}
+                                    <span class="badge bg-danger">Inactivo</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ usuario.Fecha_Creacion }}</td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('editar_usuario', id=usuario.ID_Usuario) }}" 
+                                       class="btn btn-outline-primary" title="Editar">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    {% if usuario.Estado %}
+                                        <a href="{{ url_for('eliminar_usuario', id=usuario.ID_Usuario) }}" 
+                                           class="btn btn-outline-danger" 
+                                           onclick="return confirmarEliminacion('¿Desactivar este usuario?')"
+                                           title="Desactivar">
+                                            <i class="bi bi-person-x"></i>
+                                        </a>
+                                    {% else %}
+                                        <a href="{{ url_for('activar_usuario', id=usuario.ID_Usuario) }}" 
+                                           class="btn btn-outline-success"
+                                           title="Activar">
+                                            <i class="bi bi-person-check"></i>
+                                        </a>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted">No hay usuarios registrados</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function buscarEnTabla(inputId, tableId) {
+    const input = document.getElementById(inputId);
+    const filter = input.value.toLowerCase();
+    const table = document.getElementById(tableId);
+    const tr = table.getElementsByTagName('tr');
+
+    for (let i = 1; i < tr.length; i++) {
+        const td = tr[i].getElementsByTagName('td');
+        let mostrar = false;
+        
+        for (let j = 0; j < td.length; j++) {
+            if (td[j]) {
+                if (td[j].textContent.toLowerCase().indexOf(filter) > -1) {
+                    mostrar = true;
+                    break;
+                }
+            }
+        }
+        
+        tr[i].style.display = mostrar ? '' : 'none';
+    }
+}
+
+function confirmarEliminacion(mensaje) {
+    return confirm(mensaje);
+}
+</script>
+{% endblock %}

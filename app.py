@@ -1,3 +1,4 @@
+import MySQLdb
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 from flask_mysqldb import MySQL
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -189,6 +190,171 @@ def dashboard():
                          total_productos=total_productos,
                          ventas_semana=ventas_semana,
                          productos_mas_vendidos=productos_mas_vendidos)
+
+# Usuarios
+@app.route('/usuarios')
+@admin_required
+def usuarios():
+    cur = mysql.connection.cursor()
+    cur.execute("""
+        SELECT u.ID_Usuario, u.NombreUsuario, r.Nombre_Rol, u.Estado, u.Fecha_Creacion, u.Rol_ID
+        FROM Usuarios u
+        INNER JOIN Roles r ON u.Rol_ID = r.ID_Rol
+        ORDER BY u.NombreUsuario
+    """)
+    usuarios = cur.fetchall()
+    cur.close()
+    
+    return render_template('usuarios/lista.html', usuarios=usuarios)
+
+# Mostrar formulario para crear usuario
+@app.route('/usuarios/crear', methods=['GET'])
+@admin_required
+def crear_usuario():
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT ID_Rol, Nombre_Rol FROM Roles")
+    roles = cur.fetchall()
+    cur.close()
+    
+    return render_template('usuarios/formulario.html', usuario=None, roles=roles)
+
+# Procesar creación de usuario
+@app.route('/usuarios/crear', methods=['POST'])
+@admin_required
+def crear_usuario_post():
+    nombre_usuario = request.form['nombre_usuario']
+    contrasena = request.form['contrasena']
+    confirmar_contrasena = request.form['confirmar_contrasena']
+    rol_id = request.form['rol_id']
+    estado = request.form.get('estado', 1)
+    
+    # Validaciones
+    if not nombre_usuario or not contrasena or not rol_id:
+        flash('Todos los campos obligatorios deben ser completados', 'error')
+        return redirect(url_for('crear_usuario'))
+    
+    if contrasena != confirmar_contrasena:
+        flash('Las contraseñas no coinciden', 'error')
+        return redirect(url_for('crear_usuario'))
+    
+    if len(contrasena) < 6:
+        flash('La contraseña debe tener al menos 6 caracteres', 'error')
+        return redirect(url_for('crear_usuario'))
+    
+    # Generar hash de la contraseña
+    contrasena_hash = generate_password_hash(contrasena)
+    
+    cur = mysql.connection.cursor()
+    try:
+        cur.execute("""
+            INSERT INTO Usuarios (NombreUsuario, ContrasenaHash, Rol_ID, Estado)
+            VALUES (%s, %s, %s, %s)
+        """, (nombre_usuario, contrasena_hash, rol_id, estado))
+        
+        mysql.connection.commit()
+        flash('Usuario creado exitosamente', 'success')
+        return redirect(url_for('usuarios'))
+        
+    except MySQLdb.IntegrityError:
+        flash('El nombre de usuario ya existe', 'error')
+        return redirect(url_for('crear_usuario'))
+    except Exception as e:
+        flash(f'Error al crear usuario: {str(e)}', 'error')
+        return redirect(url_for('crear_usuario'))
+    finally:
+        cur.close()
+
+# Mostrar formulario para editar usuario
+@app.route('/usuarios/editar/<int:id>', methods=['GET'])
+@admin_required
+def editar_usuario(id):
+    cur = mysql.connection.cursor()
+    
+    # Obtener datos del usuario
+    cur.execute("""
+        SELECT u.ID_Usuario, u.NombreUsuario, u.Rol_ID, u.Estado, u.Fecha_Creacion, r.Nombre_Rol
+        FROM Usuarios u
+        INNER JOIN Roles r ON u.Rol_ID = r.ID_Rol
+        WHERE u.ID_Usuario = %s
+    """, (id,))
+    
+    usuario = cur.fetchone()
+    
+    if not usuario:
+        flash('Usuario no encontrado', 'error')
+        return redirect(url_for('usuarios'))
+    
+    # Obtener roles
+    cur.execute("SELECT ID_Rol, Nombre_Rol FROM Roles")
+    roles = cur.fetchall()
+    cur.close()
+    
+    return render_template('usuarios/formulario.html', usuario=usuario, roles=roles)
+
+# Procesar edición de usuario
+@app.route('/usuarios/editar/<int:id>', methods=['POST'])
+@admin_required
+def editar_usuario_post(id):
+    nombre_usuario = request.form['nombre_usuario']
+    rol_id = request.form['rol_id']
+    estado = request.form.get('estado', 0)
+    contrasena = request.form.get('contrasena')
+    confirmar_contrasena = request.form.get('confirmar_contrasena')
+    
+    # Validar contraseñas si se proporcionan
+    if contrasena:
+        if contrasena != confirmar_contrasena:
+            flash('Las contraseñas no coinciden', 'error')
+            return redirect(url_for('editar_usuario', id=id))
+        
+        if len(contrasena) < 6:
+            flash('La contraseña debe tener al menos 6 caracteres', 'error')
+            return redirect(url_for('editar_usuario', id=id))
+    
+    cur = mysql.connection.cursor()
+    try:
+        if contrasena:  # Si se proporciona nueva contraseña
+            contrasena_hash = generate_password_hash(contrasena)
+            cur.execute("""
+                UPDATE Usuarios 
+                SET NombreUsuario = %s, Rol_ID = %s, Estado = %s, ContrasenaHash = %s
+                WHERE ID_Usuario = %s
+            """, (nombre_usuario, rol_id, estado, contrasena_hash, id))
+        else:  # No cambiar contraseña
+            cur.execute("""
+                UPDATE Usuarios 
+                SET NombreUsuario = %s, Rol_ID = %s, Estado = %s
+                WHERE ID_Usuario = %s
+            """, (nombre_usuario, rol_id, estado, id))
+        
+        mysql.connection.commit()
+        flash('Usuario actualizado exitosamente', 'success')
+        return redirect(url_for('usuarios'))
+        
+    except MySQLdb.IntegrityError:
+        flash('El nombre de usuario ya existe', 'error')
+        return redirect(url_for('editar_usuario', id=id))
+    except Exception as e:
+        flash(f'Error al actualizar usuario: {str(e)}', 'error')
+        return redirect(url_for('editar_usuario', id=id))
+    finally:
+        cur.close()
+
+# Eliminar usuario (soft delete)
+@app.route('/usuarios/eliminar/<int:id>')
+@admin_required
+def eliminar_usuario(id):
+    cur = mysql.connection.cursor()
+    try:
+        # Soft delete - cambiar estado a 0 (inactivo)
+        cur.execute("UPDATE Usuarios SET Estado = 0 WHERE ID_Usuario = %s", (id,))
+        mysql.connection.commit()
+        flash('Usuario desactivado exitosamente', 'success')
+    except Exception as e:
+        flash(f'Error al desactivar usuario: {str(e)}', 'error')
+    finally:
+        cur.close()
+    return redirect(url_for('usuarios'))
 
 # Productos
 @app.route('/productos')

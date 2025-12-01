@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Editar' if usuario else 'Nuevo' }} Usuario - Licoreria G&G{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="bi bi-person-gear"></i> 
+                        {{ 'Editar Usuario' if usuario else 'Nuevo Usuario' }}
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <!-- Mostrar mensajes flash -->
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    <form method="POST" id="usuarioForm">
+                        {% if usuario %}
+                        <input type="hidden" name="usuario_id" value="{{ usuario.get('ID_Usuario', '') }}">
+                        {% endif %}
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label for="nombre_usuario" class="form-label">Nombre de Usuario *</label>
+                                <input type="text" class="form-control" id="nombre_usuario" name="nombre_usuario" 
+                                       value="{{ usuario.get('NombreUsuario', '') if usuario else '' }}" 
+                                       required maxlength="255">
+                                <div class="form-text">El nombre de usuario debe ser único.</div>
+                            </div>
+
+                            {% if not usuario %}
+                            <div class="col-md-6 mb-3">
+                                <label for="contrasena" class="form-label">Contraseña *</label>
+                                <input type="password" class="form-control" id="contrasena" name="contrasena" 
+                                       required minlength="6">
+                                <div class="form-text">Mínimo 6 caracteres.</div>
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label for="confirmar_contrasena" class="form-label">Confirmar Contraseña *</label>
+                                <input type="password" class="form-control" id="confirmar_contrasena" name="confirmar_contrasena" 
+                                       required minlength="6">
+                            </div>
+                            {% else %}
+                            <div class="col-md-6 mb-3">
+                                <label for="contrasena" class="form-label">Nueva Contraseña</label>
+                                <input type="password" class="form-control" id="contrasena" name="contrasena" 
+                                       minlength="6">
+                                <div class="form-text">Dejar en blanco para mantener la contraseña actual.</div>
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label for="confirmar_contrasena" class="form-label">Confirmar Nueva Contraseña</label>
+                                <input type="password" class="form-control" id="confirmar_contrasena" name="confirmar_contrasena" 
+                                       minlength="6">
+                            </div>
+                            {% endif %}
+
+                            <div class="col-md-6 mb-3">
+                                <label for="rol_id" class="form-label">Rol *</label>
+                                <select class="form-select" id="rol_id" name="rol_id" required>
+                                    <option value="">Seleccionar rol...</option>
+                                    {% for rol in roles %}
+                                    <option value="{{ rol.ID_Rol }}" 
+                                            {% if usuario and usuario.get('Rol_ID') == rol.ID_Rol %}selected{% endif %}>
+                                        {{ rol.Nombre_Rol }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Estado</label>
+                                <div class="form-check form-switch mt-2">
+                                    <input class="form-check-input" type="checkbox" id="estado" name="estado" value="1"
+                                           {% if not usuario or usuario.get('Estado', 1) %}checked{% endif %}>
+                                    <label class="form-check-label" for="estado">
+                                        Usuario activo
+                                    </label>
+                                </div>
+                            </div>
+
+                            {% if usuario %}
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label">Información del Usuario</label>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-control bg-light">
+                                            <small class="text-muted">Fecha de Creación:</small><br>
+                                            {{ usuario.get('Fecha_Creacion', '') }}
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-control bg-light">
+                                            <small class="text-muted">Estado Actual:</small><br>
+                                            {% if usuario.get('Estado', 1) %}
+                                                <span class="badge bg-success">Activo</span>
+                                            {% else %}
+                                                <span class="badge bg-danger">Inactivo</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="d-flex justify-content-between mt-4">
+                            <a href="{{ url_for('usuarios') }}" class="btn btn-secondary">
+                                <i class="bi bi-arrow-left"></i> Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-save"></i> {{ 'Actualizar' if usuario else 'Guardar' }} Usuario
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('usuarioForm');
+    
+    form.addEventListener('submit', function(e) {
+        const contrasena = document.getElementById('contrasena').value;
+        const confirmarContrasena = document.getElementById('confirmar_contrasena').value;
+        const nombreUsuario = document.getElementById('nombre_usuario').value;
+        const rolId = document.getElementById('rol_id').value;
+        
+        // Validar campos obligatorios
+        if (!nombreUsuario.trim()) {
+            e.preventDefault();
+            alert('El nombre de usuario es obligatorio');
+            document.getElementById('nombre_usuario').focus();
+            return false;
+        }
+        
+        if (!rolId) {
+            e.preventDefault();
+            alert('Debe seleccionar un rol');
+            document.getElementById('rol_id').focus();
+            return false;
+        }
+        
+        // Validar contraseñas para nuevo usuario
+        {% if not usuario %}
+        if (contrasena.length < 6) {
+            e.preventDefault();
+            alert('La contraseña debe tener al menos 6 caracteres');
+            document.getElementById('contrasena').focus();
+            return false;
+        }
+        
+        if (contrasena !== confirmarContrasena) {
+            e.preventDefault();
+            alert('Las contraseñas no coinciden');
+            document.getElementById('confirmar_contrasena').focus();
+            return false;
+        }
+        {% else %}
+        // Para edición, validar solo si se cambia la contraseña
+        if (contrasena && contrasena.length < 6) {
+            e.preventDefault();
+            alert('La contraseña debe tener al menos 6 caracteres');
+            document.getElementById('contrasena').focus();
+            return false;
+        }
+        
+        if (contrasena && contrasena !== confirmarContrasena) {
+            e.preventDefault();
+            alert('Las contraseñas no coinciden');
+            document.getElementById('confirmar_contrasena').focus();
+            return false;
+        }
+        {% endif %}
+        
+        return true;
+    });
+});
+</script>
+{% endblock %}
