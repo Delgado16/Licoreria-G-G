@@ -63,12 +63,15 @@
                                         <i class="bi bi-pencil"></i>
                                     </a>
                                     {% if usuario.Estado %}
-                                        <a href="{{ url_for('eliminar_usuario', id=usuario.ID_Usuario) }}" 
-                                           class="btn btn-outline-danger" 
-                                           onclick="return confirmarEliminacion('¿Desactivar este usuario?')"
-                                           title="Desactivar">
+                                        <button type="button" 
+                                                class="btn btn-outline-danger btn-desactivar"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#modalDesactivar"
+                                                data-usuario-id="{{ usuario.ID_Usuario }}"
+                                                data-usuario-nombre="{{ usuario.NombreUsuario }}"
+                                                title="Desactivar">
                                             <i class="bi bi-person-x"></i>
-                                        </a>
+                                        </button>
                                     {% else %}
                                         <a href="{{ url_for('activar_usuario', id=usuario.ID_Usuario) }}" 
                                            class="btn btn-outline-success"
@@ -86,6 +89,66 @@
                         {% endfor %}
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Confirmación para Desactivar -->
+<div class="modal fade" id="modalDesactivar" tabindex="-1" aria-labelledby="modalDesactivarLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-white">
+                <h5 class="modal-title" id="modalDesactivarLabel">
+                    <i class="bi bi-exclamation-triangle"></i> Confirmar Desactivación
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center mb-4">
+                    <div class="mb-3">
+                        <i class="bi bi-person-x" style="font-size: 4rem; color: #dc3545;"></i>
+                    </div>
+                    <h5>¿Está seguro que desea desactivar este usuario?</h5>
+                    <p class="text-muted" id="usuarioNombreModal">Usuario: <strong></strong></p>
+                    <div class="alert alert-warning mt-3">
+                        <small>
+                            <i class="bi bi-info-circle"></i> El usuario perderá acceso al sistema pero 
+                            sus datos se mantendrán en el historial.
+                        </small>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i> Cancelar
+                </button>
+                <a href="#" id="btnConfirmarDesactivar" class="btn btn-danger">
+                    <i class="bi bi-check-circle"></i> Sí, Desactivar
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Éxito -->
+<div class="modal fade" id="modalExito" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-check-circle"></i> Operación Exitosa
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <i class="bi bi-check-circle-fill" style="font-size: 4rem; color: #198754;"></i>
+                <h5 class="mt-3" id="mensajeExito"></h5>
+            </div>
+            <div class="modal-footer justify-content-center">
+                <button type="button" class="btn btn-success" data-bs-dismiss="modal">
+                    <i class="bi bi-check-lg"></i> Aceptar
+                </button>
             </div>
         </div>
     </div>
@@ -115,8 +178,79 @@ function buscarEnTabla(inputId, tableId) {
     }
 }
 
-function confirmarEliminacion(mensaje) {
-    return confirm(mensaje);
+// Configurar modal de desactivación
+document.addEventListener('DOMContentLoaded', function() {
+    const modalDesactivar = document.getElementById('modalDesactivar');
+    
+    modalDesactivar.addEventListener('show.bs.modal', function(event) {
+        const button = event.relatedTarget;
+        const usuarioId = button.getAttribute('data-usuario-id');
+        const usuarioNombre = button.getAttribute('data-usuario-nombre');
+        
+        // Actualizar contenido del modal
+        const modalBody = modalDesactivar.querySelector('#usuarioNombreModal strong');
+        modalBody.textContent = usuarioNombre;
+        
+        // Configurar enlace de confirmación
+        const confirmarBtn = document.getElementById('btnConfirmarDesactivar');
+        confirmarBtn.href = "{{ url_for('eliminar_usuario', id=0) }}".replace('/0', '/' + usuarioId);
+    });
+    
+    // Mostrar modal de éxito si hay mensaje flash de éxito
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                {% if category == 'success' %}
+                    document.getElementById('mensajeExito').textContent = "{{ message }}";
+                    const modalExito = new bootstrap.Modal(document.getElementById('modalExito'));
+                    modalExito.show();
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+});
+
+// Función para confirmación rápida con sweetalert (opcional - más elegante)
+function confirmarEliminacionRapida(url, nombre) {
+    if (confirm(`¿Está seguro que desea desactivar al usuario ${nombre}?`)) {
+        window.location.href = url;
+    }
 }
 </script>
+
+<!-- Opcional: Incluir SweetAlert2 para ventanas emergentes más bonitas -->
+<!--
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+// Alternativa con SweetAlert2 (descomentar si lo prefieres)
+document.querySelectorAll('.btn-desactivar').forEach(button => {
+    button.addEventListener('click', function(e) {
+        e.preventDefault();
+        const usuarioId = this.getAttribute('data-usuario-id');
+        const usuarioNombre = this.getAttribute('data-usuario-nombre');
+        const url = "{{ url_for('eliminar_usuario', id=0) }}".replace('/0', '/' + usuarioId);
+        
+        Swal.fire({
+            title: '¿Desactivar Usuario?',
+            html: `<p>¿Está seguro que desea desactivar al usuario <strong>${usuarioNombre}</strong>?</p>
+                  <small class="text-warning"><i class="bi bi-exclamation-triangle"></i> El usuario perderá acceso al sistema.</small>`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: '<i class="bi bi-person-x"></i> Sí, desactivar',
+            cancelButtonText: '<i class="bi bi-x-circle"></i> Cancelar',
+            reverseButtons: true,
+            backdrop: true
+        }).then((result) => {
+            if (result.isConfirmed) {
+                window.location.href = url;
+            }
+        });
+    });
+});
+</script>
+-->
 {% endblock %}

@@ -110,7 +110,6 @@ def logout():
     flash('Has cerrado sesión correctamente', 'info')
     return redirect(url_for('login'))
 
-# Dashboard (solo administrador)
 @app.route('/dashboard')
 @admin_required
 def dashboard():
@@ -123,7 +122,8 @@ def dashboard():
         FROM Facturacion
         WHERE DATE(Fecha) = CURDATE() AND Estado = 1
     """)
-    ventas_dia = cur.fetchone()['total_dia']
+    ventas_dia_result = cur.fetchone()
+    ventas_dia = float(ventas_dia_result['total_dia']) if ventas_dia_result['total_dia'] else 0.0
     
     # Total de ventas del mes
     cur.execute("""
@@ -133,9 +133,10 @@ def dashboard():
         AND YEAR(Fecha) = YEAR(CURDATE()) 
         AND Estado = 1
     """)
-    ventas_mes = cur.fetchone()['total_mes']
+    ventas_mes_result = cur.fetchone()
+    ventas_mes = float(ventas_mes_result['total_mes']) if ventas_mes_result['total_mes'] else 0.0
     
-    # Productos con stock bajo - CORREGIDO
+    # Productos con stock bajo - CONVERSIÓN SEGURA
     cur.execute("""
         SELECT p.ID_Producto, p.Descripcion, 
                COALESCE(SUM(ib.Existencias), 0) as Existencias, 
@@ -148,13 +149,47 @@ def dashboard():
         ORDER BY Existencias ASC
         LIMIT 10
     """)
-    productos_bajo_stock = cur.fetchall()
+    productos_bajo_stock_raw = cur.fetchall()
+    
+    # Procesar productos con stock bajo
+    productos_bajo_stock = []
+    for producto in productos_bajo_stock_raw:
+        # Convertir a float para evitar problemas con Decimal
+        existencias = float(producto['Existencias']) if producto['Existencias'] else 0.0
+        stock_minimo = float(producto['Stock_Minimo']) if producto['Stock_Minimo'] else 0.0
+        
+        # Solo incluir si realmente está bajo stock
+        if existencias <= stock_minimo:
+            producto_dict = {
+                'ID_Producto': producto['ID_Producto'],
+                'Descripcion': producto['Descripcion'],
+                'Existencias': existencias,
+                'Stock_Minimo': stock_minimo,
+                'existencias_display': producto['Existencias'],  # Mantener formato original para display
+                'stock_minimo_display': producto['Stock_Minimo']  # Mantener formato original para display
+            }
+            
+            # Determinar estado
+            if existencias == 0:
+                producto_dict['estado'] = 'agotado'
+                producto_dict['estado_badge'] = 'bg-danger'
+                producto_dict['estado_texto'] = 'Agotado'
+            elif existencias <= stock_minimo * 0.5:
+                producto_dict['estado'] = 'critico'
+                producto_dict['estado_badge'] = 'bg-warning'
+                producto_dict['estado_texto'] = 'Crítico'
+            else:
+                producto_dict['estado'] = 'bajo'
+                producto_dict['estado_badge'] = 'bg-info'
+                producto_dict['estado_texto'] = 'Bajo'
+            
+            productos_bajo_stock.append(producto_dict)
     
     # Total de productos
     cur.execute("SELECT COUNT(*) as total FROM Productos WHERE Estado = 1")
     total_productos = cur.fetchone()['total']
     
-    # Ventas de los últimos 7 días
+    # Ventas de los últimos 7 días - CONVERSIÓN SEGURA
     cur.execute("""
         SELECT DATE(Fecha) as fecha, COALESCE(SUM(Total), 0) as total
         FROM Facturacion
@@ -162,7 +197,16 @@ def dashboard():
         GROUP BY DATE(Fecha)
         ORDER BY fecha ASC
     """)
-    ventas_semana = cur.fetchall()
+    ventas_semana_raw = cur.fetchall()
+    
+    # Convertir ventas a float para el gráfico
+    ventas_semana = []
+    for venta in ventas_semana_raw:
+        ventas_semana.append({
+            'fecha': venta['fecha'],
+            'total': float(venta['total']) if venta['total'] else 0.0,
+            'total_display': venta['total']  # Mantener para display si es necesario
+        })
     
     # Productos más vendidos
     cur.execute("""
@@ -177,9 +221,9 @@ def dashboard():
     """)
     productos_mas_vendidos = cur.fetchall()
     
-    producto_id = request.args.get('producto')
-    if producto_id:
-        return redirect(url_for('inventario_entrada') + f'?producto={producto_id}')
+    # Función para obtener la fecha actual
+    def now():
+        return datetime.now()
     
     cur.close()
     
@@ -189,7 +233,8 @@ def dashboard():
                          productos_bajo_stock=productos_bajo_stock,
                          total_productos=total_productos,
                          ventas_semana=ventas_semana,
-                         productos_mas_vendidos=productos_mas_vendidos)
+                         productos_mas_vendidos=productos_mas_vendidos,
+                         now=now)
 
 # Usuarios
 @app.route('/usuarios')
@@ -384,7 +429,8 @@ def productos():
 def producto_nuevo():
     if request.method == 'POST':
         try:
-            descripcion = request.form['descripcion']
+            # Obtener datos del formulario
+            descripcion = request.form['descripcion'].strip()
             unidad_medida = request.form['unidad_medida']
             precio_venta = request.form['precio_venta']
             costo_promedio = request.form.get('costo_promedio', 0)
@@ -392,7 +438,87 @@ def producto_nuevo():
             stock_minimo = request.form.get('stock_minimo', 5)
             existencias_iniciales = request.form.get('existencias_iniciales', 0)
             
+            # Validación 1: Campos obligatorios
+            campos_obligatorios = ['descripcion', 'unidad_medida', 'precio_venta', 'categoria_id']
+            faltantes = [campo for campo in campos_obligatorios if not request.form.get(campo)]
+            if faltantes:
+                flash(f'Por favor complete los siguientes campos: {", ".join(faltantes)}', 'error')
+                return redirect(url_for('producto_nuevo'))
+            
+            # Validación 2: Descripción no vacía después de trim
+            if not descripcion:
+                flash('La descripción no puede estar vacía', 'error')
+                return redirect(url_for('producto_nuevo'))
+            
+            # Validación 3: Longitud máxima
+            if len(descripcion) > 100:
+                flash('La descripción no puede tener más de 100 caracteres', 'error')
+                return redirect(url_for('producto_nuevo'))
+            
             cur = mysql.connection.cursor()
+            
+            # Validación 4: Producto duplicado (misma descripción)
+            cur.execute("""
+                SELECT ID_Producto FROM Productos 
+                WHERE LOWER(TRIM(Descripcion)) = LOWER(%s)
+            """, (descripcion,))
+            
+            producto_existente = cur.fetchone()
+            if producto_existente:
+                flash('Ya existe un producto con esa descripción', 'error')
+                cur.close()
+                return redirect(url_for('producto_nuevo'))
+            
+            # Validación 5: Formato numérico
+            try:
+                precio_venta = float(precio_venta)
+                costo_promedio = float(costo_promedio) if costo_promedio else 0
+                stock_minimo = int(stock_minimo)
+                existencias_iniciales = int(existencias_iniciales) if existencias_iniciales else 0
+            except ValueError:
+                flash('Los valores numéricos deben ser números válidos', 'error')
+                cur.close()
+                return redirect(url_for('producto_nuevo'))
+            
+            # Validación 6: Valores negativos
+            if precio_venta < 0:
+                flash('El precio de venta no puede ser negativo', 'error')
+                cur.close()
+                return redirect(url_for('producto_nuevo'))
+            
+            if costo_promedio < 0:
+                flash('El costo promedio no puede ser negativo', 'error')
+                cur.close()
+                return redirect(url_for('producto_nuevo'))
+            
+            if stock_minimo < 0:
+                flash('El stock mínimo no puede ser negativo', 'error')
+                cur.close()
+                return redirect(url_for('producto_nuevo'))
+            
+            if existencias_iniciales < 0:
+                flash('Las existencias iniciales no pueden ser negativas', 'error')
+                cur.close()
+                return redirect(url_for('producto_nuevo'))
+            
+            # Validación 7: Precio mayor a costo (opcional pero recomendado)
+            if precio_venta <= costo_promedio:
+                flash('Advertencia: El precio de venta es menor o igual al costo', 'warning')
+                # No redirigimos, solo mostramos advertencia
+            
+            # Validación 8: Existencia en catálogo de unidad de medida
+            cur.execute("SELECT ID_Unidad FROM Unidades_Medida WHERE ID_Unidad = %s", (unidad_medida,))
+            if not cur.fetchone():
+                flash('La unidad de medida seleccionada no existe', 'error')
+                cur.close()
+                return redirect(url_for('producto_nuevo'))
+            
+            # Validación 9: Existencia en catálogo de categoría
+            cur.execute("SELECT ID_Categoria FROM Categorias WHERE ID_Categoria = %s", (categoria_id,))
+            if not cur.fetchone():
+                flash('La categoría seleccionada no existe', 'error')
+                cur.close()
+                return redirect(url_for('producto_nuevo'))
             
             # Insertar producto
             cur.execute("""
@@ -448,24 +574,95 @@ def producto_editar(id):
     
     if request.method == 'POST':
         try:
-            descripcion = request.form['descripcion']
+            # Obtener datos del formulario (igual que en producto_nuevo)
+            descripcion = request.form['descripcion'].strip()
             unidad_medida = request.form['unidad_medida']
             precio_venta = request.form['precio_venta']
             costo_promedio = request.form.get('costo_promedio', 0)
             categoria_id = request.form['categoria_id']
             stock_minimo = request.form.get('stock_minimo', 5)
             
-            # Convertir valores numéricos de forma segura - CORREGIDO
-            try:
-                precio_venta = float(precio_venta) if precio_venta else 0.0
-                costo_promedio = float(costo_promedio) if costo_promedio else 0.0
-                # CORRECCIÓN: Stock_Minimo es DECIMAL en la BD, usar float no int
-                stock_minimo = float(stock_minimo) if stock_minimo else 5.0
-                unidad_medida = int(unidad_medida)
-                categoria_id = int(categoria_id)
-            except (ValueError, TypeError) as e:
-                flash('Error en los datos numéricos: ' + str(e), 'error')
+            # Validación 1: Campos obligatorios
+            campos_obligatorios = ['descripcion', 'unidad_medida', 'precio_venta', 'categoria_id']
+            faltantes = [campo for campo in campos_obligatorios if not request.form.get(campo)]
+            if faltantes:
+                flash(f'Por favor complete los siguientes campos: {", ".join(faltantes)}', 'error')
                 return redirect(url_for('producto_editar', id=id))
+            
+            # Validación 2: Descripción no vacía después de trim
+            if not descripcion:
+                flash('La descripción no puede estar vacía', 'error')
+                return redirect(url_for('producto_editar', id=id))
+            
+            # Validación 3: Longitud máxima
+            if len(descripcion) > 100:
+                flash('La descripción no puede tener más de 100 caracteres', 'error')
+                return redirect(url_for('producto_editar', id=id))
+            
+            # Validación 4: Producto duplicado (misma descripción, excluyendo el actual)
+            cur.execute("""
+                SELECT ID_Producto FROM Productos 
+                WHERE LOWER(TRIM(Descripcion)) = LOWER(%s) 
+                AND ID_Producto != %s
+                AND Estado = 1
+            """, (descripcion, id))
+            
+            producto_existente = cur.fetchone()
+            if producto_existente:
+                flash('Ya existe otro producto con esa descripción', 'error')
+                cur.close()
+                return redirect(url_for('producto_editar', id=id))
+            
+            # Validación 5: Formato numérico
+            try:
+                precio_venta = float(precio_venta)
+                costo_promedio = float(costo_promedio) if costo_promedio else 0
+                stock_minimo = int(stock_minimo)
+            except ValueError:
+                flash('Los valores numéricos deben ser números válidos', 'error')
+                cur.close()
+                return redirect(url_for('producto_editar', id=id))
+            
+            # Validación 6: Valores negativos
+            if precio_venta < 0:
+                flash('El precio de venta no puede ser negativo', 'error')
+                cur.close()
+                return redirect(url_for('producto_editar', id=id))
+            
+            if costo_promedio < 0:
+                flash('El costo promedio no puede ser negativo', 'error')
+                cur.close()
+                return redirect(url_for('producto_editar', id=id))
+            
+            if stock_minimo < 0:
+                flash('El stock mínimo no puede ser negativo', 'error')
+                cur.close()
+                return redirect(url_for('producto_editar', id=id))
+            
+            # Validación 7: Precio mayor a costo (opcional pero recomendado)
+            if precio_venta <= costo_promedio:
+                flash('Advertencia: El precio de venta es menor o igual al costo', 'warning')
+                # No redirigimos, solo mostramos advertencia
+            
+            # Validación 8: Existencia en catálogo de unidad de medida
+            cur.execute("SELECT ID_Unidad FROM Unidades_Medida WHERE ID_Unidad = %s", (unidad_medida,))
+            if not cur.fetchone():
+                flash('La unidad de medida seleccionada no existe', 'error')
+                cur.close()
+                return redirect(url_for('producto_editar', id=id))
+            
+            # Validación 9: Existencia en catálogo de categoría
+            cur.execute("SELECT ID_Categoria FROM Categorias WHERE ID_Categoria = %s", (categoria_id,))
+            if not cur.fetchone():
+                flash('La categoría seleccionada no existe', 'error')
+                cur.close()
+                return redirect(url_for('producto_editar', id=id))
+            
+            # Actualizar producto - CORREGIDO para usar los tipos correctos
+            # Nota: Convertimos unidad_medida y categoria_id a enteros ya que las validaciones
+            # anteriores ya verificaron que existen
+            unidad_medida = int(unidad_medida)
+            categoria_id = int(categoria_id)
             
             cur.execute("""
                 UPDATE Productos 
@@ -474,12 +671,14 @@ def producto_editar(id):
                 WHERE ID_Producto = %s
             """, (descripcion, unidad_medida, precio_venta, costo_promedio, 
                   categoria_id, stock_minimo, id))
+            
             mysql.connection.commit()
             flash('Producto actualizado exitosamente', 'success')
             
         except Exception as e:
             mysql.connection.rollback()
             flash(f'Error al actualizar el producto: {str(e)}', 'error')
+            return redirect(url_for('producto_editar', id=id))
         
         finally:
             cur.close()
@@ -569,23 +768,49 @@ def categorias():
 @app.route('/categorias/nueva', methods=['POST'])
 @admin_required
 def categoria_nueva():
-    descripcion = request.form['descripcion']
+    descripcion = request.form['descripcion'].strip()
     cur = mysql.connection.cursor()
+    
+    # Validar que no exista una categoría con el mismo nombre
+    cur.execute("SELECT 1 FROM Categorias WHERE LOWER(Descripcion) = LOWER(%s)", (descripcion,))
+    
+    if cur.fetchone():
+        cur.close()
+        flash('Ya existe una categoría con este nombre', 'error')
+        return redirect(url_for('categorias'))
+    
+    # Crear si no existe duplicado
     cur.execute("INSERT INTO Categorias (Descripcion) VALUES (%s)", (descripcion,))
     mysql.connection.commit()
     cur.close()
+    
     flash('Categoría creada exitosamente', 'success')
     return redirect(url_for('categorias'))
 
 @app.route('/categorias/editar/<int:id>', methods=['POST'])
 @admin_required
 def categoria_editar(id):
-    descripcion = request.form['descripcion']
+    descripcion = request.form['descripcion'].strip()
     cur = mysql.connection.cursor()
+    
+    # Validar que no haya otra categoría con el mismo nombre
+    cur.execute("""
+        SELECT 1 FROM Categorias 
+        WHERE LOWER(Descripcion) = LOWER(%s) 
+        AND ID_Categoria != %s
+    """, (descripcion, id))
+    
+    if cur.fetchone():
+        cur.close()
+        flash('Ya existe otra categoría con este nombre', 'error')
+        return redirect(url_for('categorias'))
+    
+    # Actualizar si no hay duplicados
     cur.execute("UPDATE Categorias SET Descripcion = %s WHERE ID_Categoria = %s", 
                 (descripcion, id))
     mysql.connection.commit()
     cur.close()
+    
     flash('Categoría actualizada exitosamente', 'success')
     return redirect(url_for('categorias'))
 
@@ -612,26 +837,82 @@ def unidades_medida():
 @app.route('/unidades-medida/nueva', methods=['POST'])
 @admin_required
 def unidad_nueva():
-    descripcion = request.form['descripcion']
-    abreviatura = request.form['abreviatura']
+    descripcion = request.form['descripcion'].strip()
+    abreviatura = request.form['abreviatura'].strip()
+    
     cur = mysql.connection.cursor()
+    
+    # Validar que la descripción no exista (insensible a mayúsculas/minúsculas)
+    cur.execute("SELECT COUNT(*) as count FROM Unidades_Medida WHERE LOWER(Descripcion) = LOWER(%s)", 
+                (descripcion,))
+    resultado = cur.fetchone()
+    existe_descripcion = resultado['count']  # Acceder por nombre de columna
+    
+    if existe_descripcion > 0:
+        flash('La descripción ya existe. Por favor, use otra descripción.', 'error')
+        return redirect(url_for('unidades_medida'))
+    
+    # Opcional: Validar que la abreviatura no exista
+    cur.execute("SELECT COUNT(*) as count FROM Unidades_Medida WHERE LOWER(Abreviatura) = LOWER(%s)", 
+                (abreviatura,))
+    resultado = cur.fetchone()
+    existe_abreviatura = resultado['count']  # Acceder por nombre de columna
+    
+    if existe_abreviatura > 0:
+        flash('La abreviatura ya existe. Por favor, use otra abreviatura.', 'error')
+        return redirect(url_for('unidades_medida'))
+    
+    # Si todo está bien, insertar
     cur.execute("INSERT INTO Unidades_Medida (Descripcion, Abreviatura) VALUES (%s, %s)", 
                 (descripcion, abreviatura))
     mysql.connection.commit()
     cur.close()
+    
     flash('Unidad de medida creada exitosamente', 'success')
     return redirect(url_for('unidades_medida'))
 
 @app.route('/unidades-medida/editar/<int:id>', methods=['POST'])
 @admin_required
 def unidad_editar(id):
-    descripcion = request.form['descripcion']
-    abreviatura = request.form['abreviatura']
+    descripcion = request.form['descripcion'].strip()
+    abreviatura = request.form['abreviatura'].strip()
+    
     cur = mysql.connection.cursor()
-    cur.execute("UPDATE Unidades_Medida SET Descripcion = %s, Abreviatura = %s WHERE ID_Unidad = %s", 
-                (descripcion, abreviatura, id))
+    
+    # Validar que la descripción no exista en otras unidades (excluyendo la actual)
+    cur.execute("""
+        SELECT COUNT(*) as count FROM Unidades_Medida 
+        WHERE LOWER(Descripcion) = LOWER(%s) AND ID_Unidad != %s
+    """, (descripcion, id))
+    resultado = cur.fetchone()
+    existe_descripcion = resultado['count']  # Acceder por nombre de columna
+    
+    if existe_descripcion > 0:
+        flash('La descripción ya existe en otra unidad. Por favor, use otra descripción.', 'error')
+        return redirect(url_for('unidades_medida'))
+    
+    # Opcional: Validar que la abreviatura no exista en otras unidades
+    cur.execute("""
+        SELECT COUNT(*) as count FROM Unidades_Medida 
+        WHERE LOWER(Abreviatura) = LOWER(%s) AND ID_Unidad != %s
+    """, (abreviatura, id))
+    resultado = cur.fetchone()
+    existe_abreviatura = resultado['count']  # Acceder por nombre de columna
+    
+    if existe_abreviatura > 0:
+        flash('La abreviatura ya existe en otra unidad. Por favor, use otra abreviatura.', 'error')
+        return redirect(url_for('unidades_medida'))
+    
+    # Si todo está bien, actualizar
+    cur.execute("""
+        UPDATE Unidades_Medida 
+        SET Descripcion = %s, Abreviatura = %s 
+        WHERE ID_Unidad = %s
+    """, (descripcion, abreviatura, id))
+    
     mysql.connection.commit()
     cur.close()
+    
     flash('Unidad de medida actualizada exitosamente', 'success')
     return redirect(url_for('unidades_medida'))
 
@@ -659,12 +940,51 @@ def proveedores():
 @admin_required
 def proveedor_nuevo():
     if request.method == 'POST':
-        nombre = request.form['nombre']
-        telefono = request.form.get('telefono', '')
-        direccion = request.form.get('direccion', '')
-        ruc_cedula = request.form.get('ruc_cedula', '')
+        nombre = request.form['nombre'].strip()
+        telefono = request.form.get('telefono', '').strip()
+        direccion = request.form.get('direccion', '').strip()
+        ruc_cedula = request.form.get('ruc_cedula', '').strip()
+        
+        # Validar campos obligatorios
+        if not nombre:
+            flash('El nombre del proveedor es requerido', 'error')
+            return render_template('proveedores/form.html')
         
         cur = mysql.connection.cursor()
+        
+        # PRIMERO: Verificar EXACTAMENTE qué nombres existen (para debugging)
+        cur.execute("SELECT ID_Proveedor, Nombre FROM Proveedores WHERE LOWER(Nombre) = LOWER(%s)", 
+                    (nombre,))
+        proveedores_existentes = cur.fetchall()
+        
+        print(f"DEBUG - Validando nombre: '{nombre}'")
+        print(f"DEBUG - Proveedores encontrados con este nombre: {proveedores_existentes}")
+        
+        if proveedores_existentes:
+            flash(f'El nombre "{nombre}" ya existe en el proveedor ID: {proveedores_existentes[0]["ID_Proveedor"]}', 'error')
+            return render_template('proveedores/form.html')
+        
+        # Alternativa más estricta: también verificar nombres similares (incluyendo espacios)
+        cur.execute("SELECT ID_Proveedor, Nombre FROM Proveedores WHERE TRIM(Nombre) = %s", 
+                    (nombre,))
+        proveedores_exactos = cur.fetchall()
+        
+        if proveedores_exactos:
+            flash(f'Ya existe un proveedor con el nombre exacto: "{nombre}"', 'error')
+            return render_template('proveedores/form.html')
+        
+        # Validar que el RUC/Cédula no exista (si se proporciona)
+        if ruc_cedula:
+            cur.execute("SELECT COUNT(*) as count FROM Proveedores WHERE RUC_CEDULA = %s", 
+                        (ruc_cedula,))
+            resultado = cur.fetchone()
+            existe_ruc = resultado['count']
+            
+            if existe_ruc > 0:
+                flash('El RUC/Cédula ya existe. Por favor, verifique el número.', 'error')
+                return render_template('proveedores/form.html')
+        
+        # Si todo está bien, insertar
         cur.execute("""
             INSERT INTO Proveedores (Nombre, Telefono, Direccion, RUC_CEDULA)
             VALUES (%s, %s, %s, %s)
@@ -683,11 +1003,61 @@ def proveedor_editar(id):
     cur = mysql.connection.cursor()
     
     if request.method == 'POST':
-        nombre = request.form['nombre']
-        telefono = request.form.get('telefono', '')
-        direccion = request.form.get('direccion', '')
-        ruc_cedula = request.form.get('ruc_cedula', '')
+        nombre = request.form['nombre'].strip()
+        telefono = request.form.get('telefono', '').strip()
+        direccion = request.form.get('direccion', '').strip()
+        ruc_cedula = request.form.get('ruc_cedula', '').strip()
         
+        # Validar campos obligatorios
+        if not nombre:
+            flash('El nombre del proveedor es requerido', 'error')
+            cur.execute("SELECT * FROM Proveedores WHERE ID_Proveedor = %s", (id,))
+            proveedor = cur.fetchone()
+            cur.close()
+            return render_template('proveedores/form.html', proveedor=proveedor)
+        
+        # PRIMERO: Obtener el nombre actual del proveedor
+        cur.execute("SELECT Nombre FROM Proveedores WHERE ID_Proveedor = %s", (id,))
+        proveedor_actual = cur.fetchone()
+        nombre_actual = proveedor_actual['Nombre'].strip() if proveedor_actual else ""
+        
+        print(f"DEBUG - Editando proveedor ID: {id}")
+        print(f"DEBUG - Nombre actual: '{nombre_actual}'")
+        print(f"DEBUG - Nuevo nombre: '{nombre}'")
+        
+        # Solo validar si el nombre cambió
+        if nombre.lower() != nombre_actual.lower():
+            # Validar que el nuevo nombre no exista en otros proveedores
+            cur.execute("""
+                SELECT ID_Proveedor, Nombre FROM Proveedores 
+                WHERE LOWER(Nombre) = LOWER(%s) AND ID_Proveedor != %s
+            """, (nombre, id))
+            otros_proveedores = cur.fetchall()
+            
+            if otros_proveedores:
+                flash(f'El nombre "{nombre}" ya existe', 'error')
+                cur.execute("SELECT * FROM Proveedores WHERE ID_Proveedor = %s", (id,))
+                proveedor = cur.fetchone()
+                cur.close()
+                return render_template('proveedores/form.html', proveedor=proveedor)
+        
+        # Validar que el RUC/Cédula no exista en otros proveedores
+        if ruc_cedula:
+            cur.execute("""
+                SELECT COUNT(*) as count FROM Proveedores 
+                WHERE RUC_CEDULA = %s AND ID_Proveedor != %s
+            """, (ruc_cedula, id))
+            resultado = cur.fetchone()
+            existe_ruc = resultado['count']
+            
+            if existe_ruc > 0:
+                flash('El RUC/Cédula ya existe en otro proveedor. Por favor, verifique el número.', 'error')
+                cur.execute("SELECT * FROM Proveedores WHERE ID_Proveedor = %s", (id,))
+                proveedor = cur.fetchone()
+                cur.close()
+                return render_template('proveedores/form.html', proveedor=proveedor)
+        
+        # Si todo está bien, actualizar
         cur.execute("""
             UPDATE Proveedores 
             SET Nombre = %s, Telefono = %s, Direccion = %s, RUC_CEDULA = %s

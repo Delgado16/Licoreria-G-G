@@ -11,12 +11,24 @@
         </button>
     </div>
 
+    <!-- Mensajes flash -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
     <div class="row">
         <div class="col-md-8">
             <div class="card shadow">
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table class="table table-hover">
+                        <table class="table table-hover" id="tablaCategorias">
                             <thead>
                                 <tr>
                                     <th>ID</th>
@@ -26,21 +38,21 @@
                             </thead>
                             <tbody>
                                 {% for categoria in categorias %}
-                                <tr>
+                                <tr id="categoria-{{ categoria.ID_Categoria }}">
                                     <td>{{ categoria.ID_Categoria }}</td>
                                     <td>{{ categoria.Descripcion }}</td>
                                     <td>
                                         <div class="btn-group btn-group-sm">
-                                            <button class="btn btn-outline-primary" 
-                                                    onclick="editarCategoria({{ categoria.ID_Categoria }}, '{{ categoria.Descripcion }}')">
+                                            <button class="btn btn-outline-primary btn-editar" 
+                                                    data-id="{{ categoria.ID_Categoria }}"
+                                                    data-descripcion="{{ categoria.Descripcion }}">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
-                                            <form method="POST" action="{{ url_for('categoria_eliminar', id=categoria.ID_Categoria) }}" 
-                                                  style="display: inline;" onsubmit="return confirmarEliminacion('¿Eliminar esta categoría?')">
-                                                <button type="submit" class="btn btn-outline-danger">
-                                                    <i class="bi bi-trash"></i>
-                                                </button>
-                                            </form>
+                                            <button class="btn btn-outline-danger btn-eliminar"
+                                                    data-id="{{ categoria.ID_Categoria }}"
+                                                    data-descripcion="{{ categoria.Descripcion }}">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>
@@ -60,22 +72,32 @@
 
 <!-- Modal Nueva Categoría -->
 <div class="modal fade" id="modalNuevaCategoria" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
-            <form method="POST" action="{{ url_for('categoria_nueva') }}">
-                <div class="modal-header">
-                    <h5 class="modal-title">Nueva Categoría</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            <form method="POST" action="{{ url_for('categoria_nueva') }}" id="formNuevaCategoria">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">
+                        <i class="bi bi-plus-circle"></i> Nueva Categoría
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label for="descripcion" class="form-label">Descripción</label>
-                        <input type="text" class="form-control" id="descripcion" name="descripcion" required>
+                        <label for="descripcion" class="form-label">
+                            <i class="bi bi-card-text"></i> Descripción
+                        </label>
+                        <input type="text" class="form-control" id="descripcion" name="descripcion" 
+                               required maxlength="100" placeholder="Ingrese el nombre de la categoría">
+                        <div class="form-text">Máximo 100 caracteres</div>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Guardar</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="bi bi-x-circle"></i> Cancelar
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save"></i> Guardar Categoría
+                    </button>
                 </div>
             </form>
         </div>
@@ -84,24 +106,100 @@
 
 <!-- Modal Editar Categoría -->
 <div class="modal fade" id="modalEditarCategoria" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <form method="POST" id="formEditarCategoria">
-                <div class="modal-header">
-                    <h5 class="modal-title">Editar Categoría</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <div class="modal-header bg-warning text-white">
+                    <h5 class="modal-title">
+                        <i class="bi bi-pencil-square"></i> Editar Categoría
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
+                    <input type="hidden" id="categoria_id" name="categoria_id">
                     <div class="mb-3">
-                        <label for="descripcion_edit" class="form-label">Descripción</label>
-                        <input type="text" class="form-control" id="descripcion_edit" name="descripcion" required>
+                        <label for="descripcion_edit" class="form-label">
+                            <i class="bi bi-card-text"></i> Descripción
+                        </label>
+                        <input type="text" class="form-control" id="descripcion_edit" name="descripcion" 
+                               required maxlength="100" placeholder="Ingrese el nombre de la categoría">
+                        <div class="form-text">Máximo 100 caracteres</div>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Actualizar</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="bi bi-x-circle"></i> Cancelar
+                    </button>
+                    <button type="submit" class="btn btn-warning text-white">
+                        <i class="bi bi-arrow-clockwise"></i> Actualizar
+                    </button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Confirmación para Eliminar -->
+<div class="modal fade" id="modalEliminarCategoria" tabindex="-1" aria-labelledby="modalEliminarLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="modalEliminarLabel">
+                    <i class="bi bi-exclamation-triangle"></i> Confirmar Eliminación
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center mb-4">
+                    <div class="mb-3">
+                        <i class="bi bi-trash" style="font-size: 4rem; color: #dc3545;"></i>
+                    </div>
+                    <h5>¿Está seguro que desea eliminar esta categoría?</h5>
+                    <p class="text-muted" id="categoriaInfoModal">
+                        Categoría: <strong></strong>
+                    </p>
+                    <div class="alert alert-danger mt-3">
+                        <small>
+                            <i class="bi bi-exclamation-octagon"></i> <strong>¡Advertencia!</strong><br>
+                            Esta acción no se puede deshacer. Todos los productos asociados a esta categoría 
+                            quedarán sin categoría asignada.
+                        </small>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i> Cancelar
+                </button>
+                <form method="POST" id="formEliminarCategoria" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash"></i> Sí, Eliminar
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Éxito -->
+<div class="modal fade" id="modalExito" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-check-circle"></i> Operación Exitosa
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <i class="bi bi-check-circle-fill" style="font-size: 4rem; color: #198754;"></i>
+                <h5 class="mt-3" id="mensajeExito"></h5>
+            </div>
+            <div class="modal-footer justify-content-center">
+                <button type="button" class="btn btn-success" data-bs-dismiss="modal">
+                    <i class="bi bi-check-lg"></i> Aceptar
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -109,10 +207,135 @@
 
 {% block extra_js %}
 <script>
-function editarCategoria(id, descripcion) {
-    document.getElementById('descripcion_edit').value = descripcion;
-    document.getElementById('formEditarCategoria').action = `/categorias/editar/${id}`;
-    new bootstrap.Modal(document.getElementById('modalEditarCategoria')).show();
-}
+document.addEventListener('DOMContentLoaded', function() {
+    // Configurar botones de editar
+    document.querySelectorAll('.btn-editar').forEach(button => {
+        button.addEventListener('click', function() {
+            const id = this.getAttribute('data-id');
+            const descripcion = this.getAttribute('data-descripcion');
+            
+            document.getElementById('categoria_id').value = id;
+            document.getElementById('descripcion_edit').value = descripcion;
+            document.getElementById('formEditarCategoria').action = `/categorias/editar/${id}`;
+            
+            const modal = new bootstrap.Modal(document.getElementById('modalEditarCategoria'));
+            modal.show();
+        });
+    });
+    
+    // Configurar botones de eliminar
+    const modalEliminar = document.getElementById('modalEliminarCategoria');
+    modalEliminar.addEventListener('show.bs.modal', function(event) {
+        const button = event.relatedTarget;
+        const categoriaId = button.getAttribute('data-id');
+        const categoriaDescripcion = button.getAttribute('data-descripcion');
+        
+        // Actualizar contenido del modal
+        const modalBody = modalEliminar.querySelector('#categoriaInfoModal strong');
+        modalBody.textContent = categoriaDescripcion + ' (ID: ' + categoriaId + ')';
+        
+        // Configurar formulario de eliminación
+        const formEliminar = document.getElementById('formEliminarCategoria');
+        formEliminar.action = `/categorias/eliminar/${categoriaId}`;
+    });
+    
+    // Inicializar botones de eliminar
+    document.querySelectorAll('.btn-eliminar').forEach(button => {
+        button.addEventListener('click', function() {
+            const categoriaId = this.getAttribute('data-id');
+            const categoriaDescripcion = this.getAttribute('data-descripcion');
+            
+            // Crear botón temporal con los datos
+            const tempButton = document.createElement('button');
+            tempButton.setAttribute('data-id', categoriaId);
+            tempButton.setAttribute('data-descripcion', categoriaDescripcion);
+            tempButton.style.display = 'none';
+            
+            // Disparar el modal
+            const modal = new bootstrap.Modal(modalEliminar);
+            modalEliminar.dispatchEvent(new CustomEvent('show.bs.modal', {
+                relatedTarget: tempButton
+            }));
+            modal.show();
+        });
+    });
+    
+    // Mostrar modal de éxito si hay mensaje flash de éxito
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                {% if category == 'success' %}
+                    document.getElementById('mensajeExito').textContent = "{{ message }}";
+                    const modalExito = new bootstrap.Modal(document.getElementById('modalExito'));
+                    modalExito.show();
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    // Validación del formulario de nueva categoría
+    const formNuevaCategoria = document.getElementById('formNuevaCategoria');
+    formNuevaCategoria.addEventListener('submit', function(e) {
+        const descripcion = document.getElementById('descripcion').value.trim();
+        if (!descripcion) {
+            e.preventDefault();
+            alert('Por favor ingrese una descripción para la categoría');
+            return false;
+        }
+    });
+    
+    // Validación del formulario de editar categoría
+    const formEditarCategoria = document.getElementById('formEditarCategoria');
+    formEditarCategoria.addEventListener('submit', function(e) {
+        const descripcion = document.getElementById('descripcion_edit').value.trim();
+        if (!descripcion) {
+            e.preventDefault();
+            alert('Por favor ingrese una descripción para la categoría');
+            return false;
+        }
+    });
+    
+    // Limpiar formulario de nueva categoría al cerrar
+    const modalNueva = document.getElementById('modalNuevaCategoria');
+    modalNueva.addEventListener('hidden.bs.modal', function() {
+        document.getElementById('descripcion').value = '';
+    });
+    
+    // Buscador de categorías
+    const crearBuscador = () => {
+        const tabla = document.getElementById('tablaCategorias');
+        if (!tabla) return;
+        
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'form-control mb-3';
+        input.placeholder = 'Buscar categorías...';
+        input.style.maxWidth = '300px';
+        
+        input.addEventListener('keyup', function() {
+            const filter = this.value.toLowerCase();
+            const rows = tabla.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+            
+            for (let i = 0; i < rows.length; i++) {
+                const cells = rows[i].getElementsByTagName('td');
+                let mostrar = false;
+                
+                for (let j = 0; j < cells.length; j++) {
+                    if (cells[j].textContent.toLowerCase().indexOf(filter) > -1) {
+                        mostrar = true;
+                        break;
+                    }
+                }
+                
+                rows[i].style.display = mostrar ? '' : 'none';
+            }
+        });
+        
+        // Insertar buscador antes de la tabla
+        tabla.parentNode.insertBefore(input, tabla);
+    };
+    
+    crearBuscador();
+});
 </script>
 {% endblock %}

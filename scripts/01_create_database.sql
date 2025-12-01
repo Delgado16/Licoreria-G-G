@@ -70,7 +70,6 @@ CREATE TABLE Productos (
     ID_Producto INT AUTO_INCREMENT PRIMARY KEY,
     Descripcion VARCHAR(200) NOT NULL,
     Unidad_Medida INT,
-    Existencias DECIMAL(10,2) DEFAULT 0,
     Estado TINYINT DEFAULT 1,
     Costo_Promedio DECIMAL(10,2),
     Precio_Venta DECIMAL(10,2),

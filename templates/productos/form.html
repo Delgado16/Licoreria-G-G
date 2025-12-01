@@ -68,7 +68,7 @@
                             <div class="col-md-4 mb-3">
                                 <label for="costo_promedio" class="form-label">Costo Promedio</label>
                                 <div class="input-group">
-                                    <span class="input-group-text">$</span>
+                                    <span class="input-group-text">C$</span>
                                     <input type="number" class="form-control" id="costo_promedio" name="costo_promedio" 
                                            step="0.01" min="0" 
                                            value="{{ "%.2f"|format(producto.get('Costo_Promedio', 0)) if producto else '0.00' }}">
@@ -78,7 +78,7 @@
                             <div class="col-md-4 mb-3">
                                 <label for="precio_venta" class="form-label">Precio de Venta *</label>
                                 <div class="input-group">
-                                    <span class="input-group-text">$</span>
+                                    <span class="input-group-text">C$</span>
                                     <input type="number" class="form-control" id="precio_venta" name="precio_venta" 
                                            step="0.01" min="0.01" 
                                            value="{{ "%.2f"|format(producto.get('Precio_Venta', 0)) if producto else '' }}" required>
@@ -88,23 +88,30 @@
                             <div class="col-md-4 mb-3">
                                 <label for="stock_minimo" class="form-label">Stock Mínimo *</label>
                                 <input type="number" class="form-control" id="stock_minimo" name="stock_minimo" 
-                                       min="0" step="0.01"  <!-- CAMBIO AQUÍ: step="0.01" -->
-                                       value="{{ "%.2f"|format(producto.get('Stock_Minimo', 5)) if producto else '5.00' }}" required>
+                                       min="1" step="1" 
+                                       value="{{ producto.get('Stock_Minimo', 5) if producto else '5' }}" required>
+                                <small class="text-muted">Mínimo 1 unidad</small>
                             </div>
 
                             {% if not producto %}
                             <div class="col-md-12 mb-3">
                                 <label for="existencias_iniciales" class="form-label">Existencias Iniciales</label>
-                                <input type="number" class="form-control" id="existencias_iniciales" name="existencias_iniciales" 
-                                       min="0" step="0.01" value="0">
-                                <small class="text-muted">Cantidad inicial en inventario</small>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="existencias_iniciales" name="existencias_iniciales" 
+                                           min="0" step="1" value="0">  <!-- CORRECCIÓN: Cambiado a step="1" -->
+                                    <span class="input-group-text">unidades</span>
+                                </div>
+                                <small class="text-muted">Cantidad inicial en inventario (solo números enteros)</small>
                             </div>
                             {% else %}
                             <div class="col-md-12 mb-3">
                                 <label class="form-label">Existencias Actuales</label>
-                                <input type="text" class="form-control bg-light" 
-                                       value="{{ "%.2f"|format(producto.get('Existencias', 0)) }}" 
-                                       readonly>
+                                <div class="input-group">
+                                    <input type="text" class="form-control bg-light" 
+                                           value="{{ producto.get('Existencias', 0) }}" 
+                                           readonly>
+                                    <span class="input-group-text">unidades</span>
+                                </div>
                                 <small class="text-muted">Las existencias se actualizan con movimientos de inventario</small>
                             </div>
                             {% endif %}
@@ -131,11 +138,21 @@ document.addEventListener('DOMContentLoaded', function() {
     
     form.addEventListener('submit', function(e) {
         const precioVenta = parseFloat(document.getElementById('precio_venta').value);
+        const stockMinimo = parseInt(document.getElementById('stock_minimo').value);
         
+        // Validar precio de venta
         if (precioVenta <= 0 || isNaN(precioVenta)) {
             e.preventDefault();
             alert('El precio de venta debe ser mayor a 0');
             document.getElementById('precio_venta').focus();
+            return false;
+        }
+        
+        // Validar stock mínimo
+        if (stockMinimo < 1 || isNaN(stockMinimo)) {
+            e.preventDefault();
+            alert('El stock mínimo debe ser al menos 1 unidad');
+            document.getElementById('stock_minimo').focus();
             return false;
         }
         

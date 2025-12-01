@@ -36,7 +36,15 @@
                             <td>{{ proveedor.ID_Proveedor }}</td>
                             <td>{{ proveedor.Nombre }}</td>
                             <td>{{ proveedor.RUC_CEDULA or '-' }}</td>
-                            <td>{{ proveedor.Telefono or '-' }}</td>
+                            <td>
+                                {% if proveedor.Telefono %}
+                                <a href="tel:{{ proveedor.Telefono }}" class="text-decoration-none">
+                                    <i class="bi bi-telephone"></i> {{ proveedor.Telefono }}
+                                </a>
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
                             <td>{{ proveedor.Direccion or '-' }}</td>
                             <td>
                                 <div class="btn-group btn-group-sm">
@@ -44,12 +52,13 @@
                                        class="btn btn-outline-primary" title="Editar">
                                         <i class="bi bi-pencil"></i>
                                     </a>
-                                    <form method="POST" action="{{ url_for('proveedor_eliminar', id=proveedor.ID_Proveedor) }}" 
-                                          style="display: inline;" onsubmit="return confirmarEliminacion('¿Eliminar este proveedor?')">
-                                        <button type="submit" class="btn btn-outline-danger" title="Eliminar">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
-                                    </form>
+                                    <button class="btn btn-outline-danger btn-eliminar-proveedor"
+                                            data-id="{{ proveedor.ID_Proveedor }}"
+                                            data-nombre="{{ proveedor.Nombre }}"
+                                            data-ruc="{{ proveedor.RUC_CEDULA or 'Sin RUC/Cédula' }}"
+                                            title="Eliminar">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
                                 </div>
                             </td>
                         </tr>
@@ -64,4 +73,124 @@
         </div>
     </div>
 </div>
+
+<!-- Modal de Confirmación para Eliminar Proveedor -->
+<div class="modal fade" id="modalEliminarProveedor" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-exclamation-triangle"></i> Eliminar Proveedor
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <div class="mb-3">
+                    <i class="bi bi-truck text-danger" style="font-size: 3rem;"></i>
+                </div>
+                <h5 class="mb-3">¿Está seguro de eliminar este proveedor?</h5>
+                
+                <div class="alert alert-light border mb-3">
+                    <p class="mb-1 fw-bold" id="modalProveedorNombre"></p>
+                    <p class="mb-0">RUC/Cédula: <span id="modalProveedorRuc"></span></p>
+                </div>
+                
+                <div class="alert alert-warning">
+                    <small>
+                        <i class="bi bi-info-circle"></i> Esta acción no se puede deshacer
+                    </small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i> Cancelar
+                </button>
+                <form method="POST" id="formEliminarProveedor">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash"></i> Sí, Eliminar
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Función para buscar en tabla
+function buscarEnTabla(inputId, tableId) {
+    const input = document.getElementById(inputId);
+    const filter = input.value.toLowerCase();
+    const table = document.getElementById(tableId);
+    const tr = table.getElementsByTagName('tr');
+
+    for (let i = 1; i < tr.length; i++) {
+        const td = tr[i].getElementsByTagName('td');
+        let mostrar = false;
+        
+        for (let j = 0; j < td.length; j++) {
+            if (td[j]) {
+                if (td[j].textContent.toLowerCase().indexOf(filter) > -1) {
+                    mostrar = true;
+                    break;
+                }
+            }
+        }
+        
+        tr[i].style.display = mostrar ? '' : 'none';
+    }
+}
+
+// Configuración para el modal de eliminar proveedor
+document.addEventListener('click', function(e) {
+    // Si se hace clic en un botón de eliminar
+    if (e.target.closest('.btn-eliminar-proveedor')) {
+        e.preventDefault();
+        const boton = e.target.closest('.btn-eliminar-proveedor');
+        
+        // Obtener datos del proveedor
+        const proveedorId = boton.getAttribute('data-id');
+        const proveedorNombre = boton.getAttribute('data-nombre');
+        const proveedorRuc = boton.getAttribute('data-ruc');
+        
+        // Mostrar información en el modal
+        document.getElementById('modalProveedorNombre').textContent = proveedorNombre;
+        document.getElementById('modalProveedorRuc').textContent = proveedorRuc;
+        
+        // Configurar el formulario con la URL correcta
+        const formEliminar = document.getElementById('formEliminarProveedor');
+        formEliminar.action = `/proveedores/eliminar/${proveedorId}`;
+        
+        // Mostrar el modal
+        const modal = new bootstrap.Modal(document.getElementById('modalEliminarProveedor'));
+        modal.show();
+    }
+});
+</script>
+
+<style>
+/* Estilo simple para el enlace de teléfono */
+a.text-decoration-none {
+    color: #0d6efd;
+    transition: color 0.2s;
+}
+
+a.text-decoration-none:hover {
+    color: #0a58ca;
+    text-decoration: underline;
+}
+
+/* Estilos básicos para el modal */
+.modal-content {
+    border-radius: 10px;
+    border: none;
+}
+
+.btn-danger {
+    padding: 8px 20px;
+}
+
+.btn-secondary {
+    padding: 8px 20px;
+}
+</style>
 {% endblock %}
