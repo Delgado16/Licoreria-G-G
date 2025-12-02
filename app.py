@@ -256,6 +256,7 @@ def usuarios():
 @app.route('/usuarios/crear', methods=['GET'])
 @admin_required
 def crear_usuario():
+    
     cur = mysql.connection.cursor()
     cur.execute("SELECT ID_Rol, Nombre_Rol FROM Roles")
     roles = cur.fetchall()
@@ -263,10 +264,12 @@ def crear_usuario():
     
     return render_template('usuarios/formulario.html', usuario=None, roles=roles)
 
+
 # Procesar creación de usuario
 @app.route('/usuarios/crear', methods=['POST'])
 @admin_required
 def crear_usuario_post():
+    
     nombre_usuario = request.form['nombre_usuario']
     contrasena = request.form['contrasena']
     confirmar_contrasena = request.form['confirmar_contrasena']
@@ -397,6 +400,21 @@ def eliminar_usuario(id):
         flash('Usuario desactivado exitosamente', 'success')
     except Exception as e:
         flash(f'Error al desactivar usuario: {str(e)}', 'error')
+    finally:
+        cur.close()
+    return redirect(url_for('usuarios'))
+
+@app.route('/usuarios/activar/<int:id>')
+@admin_required
+def activar_usuario(id):
+    cur = mysql.connection.cursor()
+    try:
+        # Cambiar estado a 1 (activo)
+        cur.execute("UPDATE Usuarios SET Estado = 1 WHERE ID_Usuario = %s", (id,))
+        mysql.connection.commit()
+        flash('Usuario activado exitosamente', 'success')
+    except Exception as e:
+        flash(f'Error al activar usuario: {str(e)}', 'error')
     finally:
         cur.close()
     return redirect(url_for('usuarios'))
@@ -1598,11 +1616,14 @@ def inventario_entrada():
             flash(f'❌ Error al registrar entrada: {str(e)}', 'danger')
             return jsonify({'success': False, 'message': str(e)}), 500
     
-    # GET - Cargar datos para el formulario CON EXISTENCIAS DESDE INVENTARIO_BODEGA
+    # GET - Cargar datos para el formulario CON FILTRO POR PROVEEDOR
     cur = mysql.connection.cursor()
     
-    # Obtener productos con sus existencias desde Inventario_Bodega
-    cur.execute("""
+    # Obtener proveedor_id del query string si existe
+    proveedor_filtro = request.args.get('proveedor_filtro', type=int)
+    
+    # Base de la consulta de productos
+    query_productos = """
         SELECT 
             p.ID_Producto,
             p.Descripcion,
@@ -1621,7 +1642,26 @@ def inventario_entrada():
         LEFT JOIN Categorias c ON p.Categoria_ID = c.ID_Categoria
         LEFT JOIN Unidades_Medida u ON p.Unidad_Medida = u.ID_Unidad
         LEFT JOIN Inventario_Bodega ib ON p.ID_Producto = ib.ID_Producto
-        WHERE p.Estado = 1
+    """
+    
+    # Aplicar filtro por proveedor si se seleccionó
+    params = ()
+    if proveedor_filtro:
+        query_productos += """
+            WHERE p.ID_Producto IN (
+                SELECT DISTINCT dm.ID_Producto 
+                FROM detalle_movimiento_inventario dm
+                INNER JOIN movimientos_inventario m ON dm.ID_Movimiento = m.ID_Movimiento
+                WHERE m.ID_Proveedor = %s
+            )
+            AND p.Estado = 1
+        """
+        params = (proveedor_filtro,)
+    else:
+        query_productos += " WHERE p.Estado = 1"
+    
+    # Completar consulta
+    query_productos += """
         GROUP BY 
             p.ID_Producto,
             p.Descripcion,
@@ -1636,8 +1676,17 @@ def inventario_entrada():
             c.Descripcion,
             u.Abreviatura
         ORDER BY p.Descripcion
-    """)
+    """
+    
+    cur.execute(query_productos, params)
     productos = cur.fetchall()
+    
+    # Obtener proveedor actual para mostrar su nombre
+    proveedor_actual_nombre = None
+    if proveedor_filtro:
+        cur.execute("SELECT Nombre FROM Proveedores WHERE ID_Proveedor = %s", (proveedor_filtro,))
+        proveedor_actual = cur.fetchone()
+        proveedor_actual_nombre = proveedor_actual['Nombre'] if proveedor_actual else None
     
     cur.execute("SELECT * FROM Proveedores ORDER BY Nombre")
     proveedores = cur.fetchall()
@@ -1654,7 +1703,9 @@ def inventario_entrada():
                          productos=productos,
                          proveedores=proveedores,
                          bodegas=bodegas,
-                         tipos_movimiento=tipos_movimiento)
+                         tipos_movimiento=tipos_movimiento,
+                         proveedor_filtro=proveedor_filtro,
+                         proveedor_actual_nombre=proveedor_actual_nombre)
 
 @app.route('/inventario/salida', methods=['GET', 'POST'])
 @admin_required
@@ -1665,6 +1716,8 @@ def inventario_salida():
             tipo_movimiento_id = data.get('tipo_movimiento_id')
             bodega_id = data.get('bodega_id')
             observacion = data.get('observacion', '')
+            n_factura = data.get('n_factura', '')
+            id_proveedor = data.get('id_proveedor')
             items = data.get('items', [])
             
             if not items:
@@ -1685,7 +1738,7 @@ def inventario_salida():
             cur.execute("SELECT Nombre FROM Bodegas WHERE ID_Bodega = %s", (bodega_id,))
             bodega_nombre = cur.fetchone()['Nombre']
             
-            # Verificar stock disponible EN LA BODEGA ESPECÍFICA - CORREGIDO
+            # Verificar stock disponible EN LA BODEGA ESPECÍFICA
             productos_sin_stock = []
             for item in items:
                 cur.execute("""
@@ -1714,22 +1767,34 @@ def inventario_salida():
                 flash(mensaje_error, 'danger')
                 return jsonify({'success': False, 'message': mensaje_error}), 400
             
-            # Insertar movimiento
+            # Insertar movimiento CON FACTURA Y PROVEEDOR
             cur.execute("""
                 INSERT INTO Movimientos_Inventario 
-                (ID_TipoMovimiento, Observacion, ID_Bodega)
-                VALUES (%s, %s, %s)
-            """, (tipo_movimiento_id, observacion, bodega_id))
+                (ID_TipoMovimiento, Observacion, ID_Bodega, Fecha, N_Factura, ID_Proveedor)
+                VALUES (%s, %s, %s, CURDATE(), %s, %s)
+            """, (tipo_movimiento_id, observacion, bodega_id, n_factura, id_proveedor))
             
             movimiento_id = cur.lastrowid
             
-            # Insertar detalles y ACTUALIZAR INVENTARIO - CORREGIDO
+            # Insertar detalles y ACTUALIZAR INVENTARIO
             total_productos = 0
+            total_costo = 0
+            
             for item in items:
                 producto_id = item['producto_id']
                 cantidad = item['cantidad']
-                costo = item.get('costo', 0)
-                costo_total = item.get('costo_total', 0)
+                
+                # Obtener el costo promedio del producto para registrar en el detalle
+                cur.execute("""
+                    SELECT Costo_Promedio 
+                    FROM Productos 
+                    WHERE ID_Producto = %s
+                """, (producto_id,))
+                
+                producto_info = cur.fetchone()
+                costo = producto_info['Costo_Promedio'] if producto_info and producto_info['Costo_Promedio'] else 0
+                costo_total = cantidad * costo
+                total_costo += costo_total
                 
                 total_productos += cantidad
                 
@@ -1740,68 +1805,118 @@ def inventario_salida():
                     VALUES (%s, %s, %s, %s, %s)
                 """, (movimiento_id, producto_id, cantidad, costo, costo_total))
                 
-                # ACTUALIZAR INVENTARIO EN BODEGA - CORREGIDO (manejar si no existe)
+                # ACTUALIZAR INVENTARIO EN BODEGA
                 cur.execute("""
-                    SELECT 1 FROM Inventario_Bodega 
+                    UPDATE Inventario_Bodega 
+                    SET Existencias = Existencias - %s
                     WHERE ID_Bodega = %s AND ID_Producto = %s
-                """, (bodega_id, producto_id))
-                
-                if cur.fetchone():
-                    # Si existe, actualizar
-                    cur.execute("""
-                        UPDATE Inventario_Bodega 
-                        SET Existencias = Existencias - %s
-                        WHERE ID_Bodega = %s AND ID_Producto = %s
-                    """, (cantidad, bodega_id, producto_id))
-                else:
-                    # Si no existe, insertar con existencias negativas (esto no debería pasar si verificamos stock)
-                    cur.execute("""
-                        INSERT INTO Inventario_Bodega (ID_Bodega, ID_Producto, Existencias)
-                        VALUES (%s, %s, %s)
-                    """, (bodega_id, producto_id, -cantidad))
+                """, (cantidad, bodega_id, producto_id))
             
             mysql.connection.commit()
             cur.close()
             
-            flash(f'✅ Salida de inventario registrada exitosamente! Movimiento #{movimiento_id} - {total_productos} unidades desde {bodega_nombre}', 'success')
+            # Preparar mensaje con información de factura si existe
+            mensaje_factura = f"Factura: {n_factura}" if n_factura else "Sin factura"
+            flash(f'✅ Salida registrada! Movimiento #{movimiento_id} - {total_productos} unidades desde {bodega_nombre} | {mensaje_factura}', 'success')
+            
             return jsonify({
                 'success': True,
                 'message': 'Salida de inventario registrada exitosamente',
-                'movimiento_id': movimiento_id
+                'movimiento_id': movimiento_id,
+                'n_factura': n_factura,
+                'total_productos': total_productos,
+                'total_costo': total_costo
             })
             
         except Exception as e:
             mysql.connection.rollback()
-            flash(f'❌ Error al registrar salida de inventario: {str(e)}', 'danger')
+            flash(f'❌ Error al registrar salida: {str(e)}', 'danger')
             return jsonify({'success': False, 'message': str(e)}), 500
     
-    # GET - CORREGIDO
+    # GET - Cargar datos para el formulario CON FILTRO POR PROVEEDOR
     cur = mysql.connection.cursor()
     
-    cur.execute("""
-        SELECT p.*, c.Descripcion as Categoria, u.Abreviatura,
-               COALESCE(ib.Existencias, 0) as Stock_Bodega
+    # Obtener proveedor_id del query string si existe
+    proveedor_filtro = request.args.get('proveedor_filtro', type=int)
+    
+    # Consulta base para productos con stock
+    query_productos = """
+        SELECT 
+            p.ID_Producto, 
+            p.Descripcion,
+            COALESCE(SUM(ib.Existencias), 0) as Stock_Total,
+            u.Abreviatura,
+            c.Descripcion as Categoria,
+            p.Costo_Promedio,
+            p.Estado,
+            p.Unidad_Medida,
+            p.Stock_Minimo
         FROM Productos p
-        LEFT JOIN Categorias c ON p.Categoria_ID = c.ID_Categoria
         LEFT JOIN Unidades_Medida u ON p.Unidad_Medida = u.ID_Unidad
+        LEFT JOIN Categorias c ON p.Categoria_ID = c.ID_Categoria
         LEFT JOIN Inventario_Bodega ib ON p.ID_Producto = ib.ID_Producto
-        WHERE p.Estado = 1 AND COALESCE(ib.Existencias, 0) > 0  -- CORREGIDO: usar Stock_Bodega en lugar de Existencias
+    """
+    
+    # Aplicar filtro por proveedor si se seleccionó
+    params = ()
+    if proveedor_filtro:
+        query_productos += """
+            WHERE p.ID_Producto IN (
+                SELECT DISTINCT dm.ID_Producto 
+                FROM detalle_movimiento_inventario dm
+                INNER JOIN movimientos_inventario m ON dm.ID_Movimiento = m.ID_Movimiento
+                WHERE m.ID_Proveedor = %s
+            )
+            AND p.Estado = 1
+        """
+        params = (proveedor_filtro,)
+    else:
+        query_productos += " WHERE p.Estado = 1"
+    
+    # Completar consulta
+    query_productos += """
+        GROUP BY 
+            p.ID_Producto, 
+            p.Descripcion, 
+            u.Abreviatura, 
+            c.Descripcion, 
+            p.Costo_Promedio,
+            p.Estado,
+            p.Unidad_Medida,
+            p.Stock_Minimo
+        HAVING Stock_Total > 0
         ORDER BY p.Descripcion
-    """)
+    """
+    
+    cur.execute(query_productos, params)
     productos = cur.fetchall()
     
-    cur.execute("SELECT * FROM Bodegas ORDER BY Nombre")
+    # Obtener proveedor actual para mostrar su nombre
+    proveedor_actual_nombre = None
+    if proveedor_filtro:
+        cur.execute("SELECT Nombre FROM Proveedores WHERE ID_Proveedor = %s", (proveedor_filtro,))
+        proveedor_actual = cur.fetchone()
+        proveedor_actual_nombre = proveedor_actual['Nombre'] if proveedor_actual else None
+    
+    cur.execute("SELECT * FROM Bodegas WHERE ID_Bodega > 0 ORDER BY Nombre")
     bodegas = cur.fetchall()
     
     cur.execute("SELECT * FROM Catalogo_Movimientos WHERE Adicion = 'SALIDA' ORDER BY Descripcion")
     tipos_movimiento = cur.fetchall()
+    
+    # Obtener proveedores (pueden ser clientes/destinatarios para salidas)
+    cur.execute("SELECT * FROM Proveedores ORDER BY Nombre")
+    proveedores = cur.fetchall()
     
     cur.close()
     
     return render_template('inventario/salida.html',
                          productos=productos,
                          bodegas=bodegas,
-                         tipos_movimiento=tipos_movimiento)
+                         tipos_movimiento=tipos_movimiento,
+                         proveedores=proveedores,
+                         proveedor_filtro=proveedor_filtro,
+                         proveedor_actual_nombre=proveedor_actual_nombre)
 
 @app.route('/inventario/detalle/<int:id>')
 @admin_required

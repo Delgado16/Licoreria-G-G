@@ -5,66 +5,30 @@
 {% block content %}
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1><i class="bi bi-dash-circle"></i> Salida de Inventario</h1>
-        <a href="{{ url_for('inventario') }}" class="btn btn-secondary">
-            <i class="bi bi-arrow-left"></i> Volver
-        </a>
+        <h1>
+            <i class="bi bi-box-arrow-up"></i> Salida de Inventario
+        </h1>
+        <div>
+            <button class="btn btn-outline-secondary" onclick="limpiarFormulario()">
+                <i class="bi bi-arrow-clockwise"></i> Limpiar
+            </button>
+            <a href="{{ url_for('inventario') }}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Volver
+            </a>
+        </div>
     </div>
 
     <div class="row">
-        <div class="col-md-8">
-            <div class="card shadow mb-4">
-                <div class="card-header bg-warning text-dark">
-                    <h5 class="mb-0">Productos Disponibles</h5>
-                </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <input type="text" id="searchProducto" class="form-control" 
-                               placeholder="Buscar producto...">
-                    </div>
-
-                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
-                        <table class="table table-sm table-hover">
-                            <thead class="sticky-top bg-white">
-                                <tr>
-                                    <th>Producto</th>
-                                    <th>Stock Disponible</th>
-                                    <th>Acción</th>
-                                </tr>
-                            </thead>
-                            <tbody id="productosTableBody">
-                                {% for producto in productos %}
-                                <tr class="producto-row">
-                                    <td>{{ producto.Descripcion }}</td>
-                                    <td>
-                                        <span class="badge {% if producto.Stock_Bodega <= producto.Stock_Minimo %}bg-warning{% else %}bg-success{% endif %}">
-                                            {{ producto.Stock_Bodega }} {{ producto.Abreviatura }}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <button class="btn btn-sm btn-warning" 
-                                                onclick="mostrarPopupCantidad({{ producto.ID_Producto }}, '{{ producto.Descripcion }}', {{ producto.Stock_Bodega }}, '{{ producto.Abreviatura }}')">
-                                            <i class="bi bi-dash"></i>
-                                        </button>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-
+        <!-- Panel de Control -->
         <div class="col-md-4">
-            <div class="card shadow sticky-top" style="top: 20px;">
+            <div class="card shadow mb-4">
                 <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0">Detalle de Salida</h5>
+                    <h5 class="mb-0"><i class="bi bi-sliders"></i> Control de Salida</h5>
                 </div>
                 <div class="card-body">
                     <form id="formSalida">
                         <div class="mb-3">
-                            <label for="tipo_movimiento" class="form-label">Tipo de Movimiento *</label>
+                            <label class="form-label">Tipo de Movimiento *</label>
                             <select id="tipo_movimiento" class="form-select" required>
                                 <option value="">Seleccionar...</option>
                                 {% for tipo in tipos_movimiento %}
@@ -74,7 +38,7 @@
                         </div>
 
                         <div class="mb-3">
-                            <label for="bodega" class="form-label">Bodega *</label>
+                            <label class="form-label">Bodega *</label>
                             <select id="bodega" class="form-select" required>
                                 <option value="">Seleccionar...</option>
                                 {% for bodega in bodegas %}
@@ -84,28 +48,178 @@
                         </div>
 
                         <div class="mb-3">
-                            <label for="observacion" class="form-label">Observación *</label>
+                            <label class="form-label">Proveedor *</label>
+                            <div class="d-flex gap-2">
+                                <select id="id_proveedor" class="form-select" onchange="filtrarPorProveedor(this.value)">
+                                    <option value="">Seleccionar (opcional)...</option>
+                                    {% for proveedor in proveedores %}
+                                    <option value="{{ proveedor.ID_Proveedor }}"
+                                            {% if proveedor_filtro == proveedor.ID_Proveedor %}selected{% endif %}>
+                                        {{ proveedor.Nombre }}
+                                        {% if proveedor.RUC_CEDULA %}({{ proveedor.RUC_CEDULA }}){% endif %}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                {% if proveedor_filtro %}
+                                <button type="button" class="btn btn-outline-danger" onclick="limpiarFiltroProveedor()">
+                                    <i class="bi bi-x-circle"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                            {% if proveedor_filtro %}
+                            <small class="text-muted mt-1 d-block">
+                                <i class="bi bi-info-circle"></i> Mostrando productos vendidos anteriormente a este cliente
+                            </small>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">N° Factura/Comprobante</label>
+                            <input type="text" id="n_factura" class="form-control" placeholder="Opcional">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Observación *</label>
                             <textarea id="observacion" class="form-control" rows="3" required 
                                       placeholder="Motivo de la salida..."></textarea>
                         </div>
                     </form>
+                </div>
+            </div>
 
-                    <hr>
-
-                    <h6>Productos a Retirar</h6>
-                    <div id="productosAgregados" style="max-height: 200px; overflow-y: auto; min-height: 100px;">
-                        <p class="text-center text-muted">No hay productos agregados</p>
+            <!-- Resumen -->
+            <div class="card shadow">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="bi bi-receipt"></i> Resumen</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Productos:</span>
+                        <strong id="contadorProductos">0</strong>
                     </div>
-
-                    <hr>
-
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Unidades:</span>
+                        <strong id="totalUnidades">0</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-3">
+                        <span>Costo Estimado:</span>
+                        <strong>C$<span id="totalCosto">0.00</span></strong>
+                    </div>
+                    
                     <div class="d-grid gap-2">
-                        <button id="btnGuardar" class="btn btn-warning" onclick="guardarSalida()" disabled>
-                            <i class="bi bi-save"></i> Guardar Salida
+                        <button id="btnGuardar" class="btn btn-warning btn-lg" onclick="guardarSalida()" disabled>
+                            <i class="bi bi-check-circle"></i> Registrar Salida
                         </button>
-                        <button class="btn btn-outline-danger" onclick="limpiarFormulario()">
-                            <i class="bi bi-x-circle"></i> Limpiar
-                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel de Productos -->
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="mb-0"><i class="bi bi-box-seam"></i> Productos Disponibles</h5>
+                        {% if proveedor_filtro %}
+                        <small class="d-block mt-1">
+                            <i class="bi bi-lightning"></i> Filtro activo: {{ productos|length }} productos disponibles
+                        </small>
+                        {% endif %}
+                    </div>
+                    <div class="input-group" style="width: 300px;">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" id="searchProducto" class="form-control" placeholder="Buscar producto...">
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Productos Agregados -->
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2">
+                            <i class="bi bi-list-check"></i> Productos a Retirar
+                            <span class="badge bg-warning ms-2" id="contadorProductos2">0</span>
+                        </h6>
+                        <div id="productosAgregados" class="table-responsive" style="max-height: 200px;">
+                            <table class="table table-sm">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>Producto</th>
+                                        <th width="100">Cantidad</th>
+                                        <th width="100">Costo</th>
+                                        <th width="80"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaProductosBody">
+                                    <tr>
+                                        <td colspan="4" class="text-center text-muted py-4">
+                                            <i class="bi bi-inbox display-6 d-block mb-2"></i>
+                                            No hay productos agregados
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Catálogo de Productos -->
+                    <h6 class="border-bottom pb-2">
+                        <i class="bi bi-box"></i> Catálogo de Productos
+                        <span class="badge bg-light text-dark">{{ productos|length }}</span>
+                    </h6>
+                    
+                    {% if proveedor_filtro and productos|length == 0 %}
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        No se encontraron productos vendidos anteriormente a este cliente.
+                        <a href="#" onclick="limpiarFiltroProveedor()" class="alert-link">Ver todos los productos</a>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="table-responsive" style="max-height: 400px;">
+                        <table class="table table-sm table-hover">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Categoría</th>
+                                    <th>Stock</th>
+                                    <th>Costo</th>
+                                    <th width="100"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="productosTableBody">
+                                {% for producto in productos %}
+                                <tr class="producto-row" data-nombre="{{ producto.Descripcion|lower }}">
+                                    <td>
+                                        <strong>{{ producto.Descripcion }}</strong>
+                                        <br>
+                                        <small class="text-muted">{{ producto.Abreviatura }}</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-secondary">{{ producto.Categoria or 'Sin cat.' }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge {% if producto.Stock_Total <= producto.Stock_Minimo %}bg-danger{% else %}bg-success{% endif %}">
+                                            {{ "%.2f"|format(producto.Stock_Total) }}
+                                        </span>
+                                    </td>
+                                    <td>C${{ "%.2f"|format(producto.Costo_Promedio or 0) }}</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-warning" 
+                                                onclick="agregarProductoSalida({{ producto.ID_Producto }}, '{{ producto.Descripcion }}', {{ producto.Stock_Total }}, '{{ producto.Abreviatura }}', {{ producto.Costo_Promedio or 0 }})">
+                                            <i class="bi bi-dash-circle"></i> Retirar
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-4">
+                                        <i class="bi bi-database-slash display-6 d-block mb-2"></i>
+                                        No hay productos con stock disponible
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -113,343 +227,239 @@
     </div>
 </div>
 
-<!-- Overlay para fondo oscuro -->
-<div id="popupOverlay" class="popup-overlay" style="display: none;"></div>
-
-<!-- Ventana emergente personalizada -->
-<div id="popupCantidad" class="custom-popup" style="display: none;">
-    <div class="popup-header">
-        <h5><i class="bi bi-cart-dash"></i> Cantidad a Retirar</h5>
-        <button type="button" class="popup-close" onclick="cerrarPopup()">
-            <i class="bi bi-x-lg"></i>
-        </button>
-    </div>
-    <div class="popup-body">
-        <div class="producto-info mb-3 p-3 bg-light rounded">
-            <div class="row">
-                <div class="col-8">
-                    <strong id="popupProductoNombre"></strong>
+<!-- Modal para Cantidad -->
+<div class="modal fade" id="modalCantidad" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title">Especificar Cantidad</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <p class="mb-1"><strong id="modalProductoNombre"></strong></p>
+                    <p class="small text-muted mb-2">Stock: <span id="modalStockDisponible"></span> <span id="modalUnidad"></span></p>
+                    
+                    <label class="form-label">Cantidad a Retirar *</label>
+                    <input type="number" id="modalCantidadInput" class="form-control" 
+                           min="0.01" step="0.01" required>
                 </div>
-                <div class="col-4 text-end">
-                    <span class="badge bg-info" id="popupStockDisponible"></span>
+                <div class="text-center">
+                    <p class="mb-0">Costo estimado:</p>
+                    <h4 class="text-success" id="modalCostoTotal">C$0.00</h4>
                 </div>
             </div>
-        </div>
-        
-        <div class="mb-3">
-            <label for="popupCantidadInput" class="form-label">Cantidad a Retirar *</label>
-            <input type="number" 
-                   class="form-control form-control-lg" 
-                   id="popupCantidadInput" 
-                   min="0.01" 
-                   step="0.01" 
-                   placeholder="0.00"
-                   required>
-            <div class="form-text">Stock máximo disponible: <span id="popupMaxCantidad"></span></div>
-        </div>
-        
-        <div class="cantidad-rapida mt-3">
-            <label class="form-label">Cantidades rápidas:</label>
-            <div class="btn-group w-100" role="group">
-                <button type="button" class="btn btn-outline-secondary" onclick="establecerCantidadRapida(1)">1</button>
-                <button type="button" class="btn btn-outline-secondary" onclick="establecerCantidadRapida(10)">10</button>
-                <button type="button" class="btn btn-outline-secondary" onclick="establecerCantidadRapida(15)">15</button>
-                <button type="button" class="btn btn-outline-secondary" onclick="establecerCantidadRapida(20)">20</button>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-warning" onclick="confirmarCantidad()">
+                    <i class="bi bi-plus-circle"></i> Agregar
+                </button>
             </div>
         </div>
-    </div>
-    <div class="popup-footer">
-        <button type="button" class="btn btn-secondary" onclick="cerrarPopup()">
-            <i class="bi bi-x-circle"></i> Cancelar
-        </button>
-        <button type="button" class="btn btn-warning" onclick="confirmarCantidad()">
-            <i class="bi bi-check-circle"></i> Agregar Producto
-        </button>
     </div>
 </div>
-
-<style>
-.popup-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.7);
-    z-index: 9998;
-    backdrop-filter: blur(3px);
-}
-
-.custom-popup {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 90%;
-    max-width: 500px;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-    z-index: 9999;
-    animation: popupAppear 0.3s ease-out;
-}
-
-@keyframes popupAppear {
-    from {
-        opacity: 0;
-        transform: translate(-50%, -60%);
-    }
-    to {
-        opacity: 1;
-        transform: translate(-50%, -50%);
-    }
-}
-
-.popup-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.25rem 1.5rem;
-    border-bottom: 2px solid #ffc107;
-    background: linear-gradient(135deg, #ffc107, #ffca2c);
-    border-radius: 12px 12px 0 0;
-    color: #212529;
-}
-
-.popup-header h5 {
-    margin: 0;
-    font-weight: 600;
-}
-
-.popup-close {
-    background: none;
-    border: none;
-    font-size: 1.25rem;
-    color: #212529;
-    cursor: pointer;
-    padding: 0.25rem;
-    border-radius: 4px;
-    transition: background-color 0.2s;
-}
-
-.popup-close:hover {
-    background-color: rgba(0, 0, 0, 0.1);
-}
-
-.popup-body {
-    padding: 1.5rem;
-    max-height: 60vh;
-    overflow-y: auto;
-}
-
-.popup-footer {
-    display: flex;
-    justify-content: space-between;
-    padding: 1.25rem 1.5rem;
-    border-top: 1px solid #dee2e6;
-    gap: 1rem;
-}
-
-.popup-footer .btn {
-    flex: 1;
-    padding: 0.75rem;
-}
-
-.producto-info {
-    border-left: 4px solid #0d6efd;
-}
-
-.cantidad-rapida .btn-group .btn {
-    padding: 0.5rem;
-}
-
-/* Responsive */
-@media (max-width: 576px) {
-    .custom-popup {
-        width: 95%;
-        margin: 1rem;
-    }
-    
-    .popup-footer {
-        flex-direction: column;
-    }
-}
-</style>
 {% endblock %}
 
 {% block extra_js %}
 <script>
 let productosSalida = [];
 let productoActual = null;
+let modalCantidad = null;
 
-function mostrarPopupCantidad(id, nombre, stockDisponible, unidad) {
+document.addEventListener('DOMContentLoaded', function() {
+    modalCantidad = new bootstrap.Modal(document.getElementById('modalCantidad'));
+    
+    // Búsqueda
+    document.getElementById('searchProducto').addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase();
+        const rows = document.querySelectorAll('.producto-row');
+        
+        rows.forEach(row => {
+            const nombre = row.getAttribute('data-nombre');
+            row.style.display = nombre.includes(searchTerm) ? '' : 'none';
+        });
+    });
+    
+    // Calcular costo en tiempo real
+    document.getElementById('modalCantidadInput').addEventListener('input', function() {
+        calcularCostoModal();
+    });
+});
+
+// FUNCIONES PARA FILTRO POR PROVEEDOR
+function filtrarPorProveedor(proveedorId) {
+    if (!proveedorId) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set('proveedor_filtro', proveedorId);
+    window.location.href = url.toString();
+}
+
+function limpiarFiltroProveedor() {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('proveedor_filtro');
+    window.location.href = url.toString();
+}
+
+function agregarProductoSalida(id, nombre, stock, unidad, costo) {
     productoActual = {
-        producto_id: id,
+        producto_id: parseInt(id),
         nombre: nombre,
-        stock_disponible: stockDisponible,
-        unidad: unidad
+        stock_disponible: stock,
+        unidad: unidad,
+        costo_unitario: costo
     };
     
-    // Actualizar contenido del popup
-    document.getElementById('popupProductoNombre').textContent = nombre;
-    document.getElementById('popupStockDisponible').textContent = `${stockDisponible} ${unidad}`;
-    document.getElementById('popupMaxCantidad').textContent = `${stockDisponible} ${unidad}`;
+    // Configurar modal
+    document.getElementById('modalProductoNombre').textContent = nombre;
+    document.getElementById('modalStockDisponible').textContent = stock.toFixed(2);
+    document.getElementById('modalUnidad').textContent = unidad;
+    document.getElementById('modalCantidadInput').value = '';
+    document.getElementById('modalCantidadInput').max = stock;
+    document.getElementById('modalCostoTotal').textContent = 'C$0.00';
     
-    // Resetear campo de cantidad
-    const cantidadInput = document.getElementById('popupCantidadInput');
-    cantidadInput.value = '';
-    cantidadInput.max = stockDisponible;
-    
-    // Mostrar popup y overlay
-    document.getElementById('popupOverlay').style.display = 'block';
-    document.getElementById('popupCantidad').style.display = 'block';
-    
-    // Enfocar el campo de cantidad
-    setTimeout(() => {
-        cantidadInput.focus();
-    }, 100);
-    
-    // Agregar evento para tecla Escape
-    document.addEventListener('keydown', manejarTecladoPopup);
+    modalCantidad.show();
 }
 
-function cerrarPopup() {
-    document.getElementById('popupOverlay').style.display = 'none';
-    document.getElementById('popupCantidad').style.display = 'none';
-    document.removeEventListener('keydown', manejarTecladoPopup);
-    productoActual = null;
-}
-
-function manejarTecladoPopup(e) {
-    if (e.key === 'Escape') {
-        cerrarPopup();
-    } else if (e.key === 'Enter') {
-        confirmarCantidad();
-    }
-}
-
-function establecerCantidadRapida(cantidad) {
-    const input = document.getElementById('popupCantidadInput');
-    const max = parseFloat(input.max);
-    
-    if (cantidad <= max) {
-        input.value = cantidad;
-    } else {
-        input.value = max;
-        mostrarToast('La cantidad no puede ser mayor al stock disponible', 'warning');
-    }
-    input.focus();
+function calcularCostoModal() {
+    const cantidad = parseFloat(document.getElementById('modalCantidadInput').value) || 0;
+    const costo = productoActual.costo_unitario || 0;
+    document.getElementById('modalCostoTotal').textContent = `C$${(cantidad * costo).toFixed(2)}`;
 }
 
 function confirmarCantidad() {
-    const cantidadInput = document.getElementById('popupCantidadInput');
-    const cantidad = parseFloat(cantidadInput.value);
+    const cantidad = parseFloat(document.getElementById('modalCantidadInput').value) || 0;
     
     if (!cantidad || cantidad <= 0) {
         mostrarToast('Ingrese una cantidad válida', 'warning');
-        cantidadInput.focus();
         return;
     }
     
     if (cantidad > productoActual.stock_disponible) {
-        mostrarToast('Cantidad mayor al stock disponible', 'danger');
-        cantidadInput.focus();
+        mostrarToast(`Cantidad excede el stock disponible (${productoActual.stock_disponible})`, 'danger');
         return;
     }
     
-    // Verificar si el producto ya está en la lista
-    const indexExistente = productosSalida.findIndex(item => item.producto_id === productoActual.producto_id);
+    const costoTotal = cantidad * productoActual.costo_unitario;
     
-    if (indexExistente !== -1) {
-        // Si ya existe, preguntar si quiere reemplazar o sumar
-        if (confirmarReemplazo(productoActual.nombre)) {
-            productosSalida[indexExistente].cantidad = cantidad;
-        } else {
-            // Sumar a la cantidad existente
-            const nuevaCantidad = productosSalida[indexExistente].cantidad + cantidad;
-            
-            if (nuevaCantidad > productoActual.stock_disponible) {
-                mostrarToast('La cantidad total excede el stock disponible', 'danger');
-                productosSalida[indexExistente].cantidad = productoActual.stock_disponible;
-            } else {
-                productosSalida[indexExistente].cantidad = nuevaCantidad;
-            }
-        }
+    // Verificar si ya existe
+    const index = productosSalida.findIndex(p => p.producto_id === productoActual.producto_id);
+    
+    if (index !== -1) {
+        productosSalida[index].cantidad = cantidad;
+        productosSalida[index].costo_total = costoTotal;
+        mostrarToast('Producto actualizado', 'info');
     } else {
-        // Agregar nuevo producto
         productosSalida.push({
             producto_id: productoActual.producto_id,
             nombre: productoActual.nombre,
             cantidad: cantidad,
-            stock_disponible: productoActual.stock_disponible,
+            costo_unitario: productoActual.costo_unitario,
+            costo_total: costoTotal,
             unidad: productoActual.unidad
         });
+        mostrarToast('Producto agregado', 'success');
     }
     
+    modalCantidad.hide();
     actualizarListaProductos();
-    mostrarToast('Producto agregado correctamente', 'success');
-    cerrarPopup();
-}
-
-function confirmarReemplazo(nombreProducto) {
-    // Crear un popup de confirmación personalizado
-    return confirm(`El producto "${nombreProducto}" ya está en la lista. ¿Desea reemplazar la cantidad anterior?`);
 }
 
 function actualizarListaProductos() {
-    const container = document.getElementById('productosAgregados');
+    const tbody = document.getElementById('tablaProductosBody');
+    const contador = document.getElementById('contadorProductos');
+    const contador2 = document.getElementById('contadorProductos2');
     const btnGuardar = document.getElementById('btnGuardar');
+    const totalUnidades = document.getElementById('totalUnidades');
+    const totalCosto = document.getElementById('totalCosto');
     
     if (productosSalida.length === 0) {
-        container.innerHTML = '<p class="text-center text-muted">No hay productos agregados</p>';
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="4" class="text-center text-muted py-4">
+                    <i class="bi bi-inbox display-6 d-block mb-2"></i>
+                    No hay productos agregados
+                </td>
+            </tr>
+        `;
         btnGuardar.disabled = true;
+        contador.textContent = '0';
+        contador2.textContent = '0';
+        totalUnidades.textContent = '0';
+        totalCosto.textContent = '0.00';
         return;
     }
     
     let html = '';
-    let totalProductos = 0;
+    let totalUnidadesSum = 0;
+    let totalCostoSum = 0;
     
     productosSalida.forEach((item, index) => {
-        totalProductos += item.cantidad;
+        totalUnidadesSum += item.cantidad;
+        totalCostoSum += item.costo_total;
+        
         html += `
-            <div class="border-bottom pb-2 mb-2">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div class="flex-grow-1">
-                        <strong>${item.nombre}</strong><br>
-                        <small>Cantidad: ${item.cantidad} ${item.unidad}</small><br>
-                        <small class="text-muted">Disponible: ${item.stock_disponible} ${item.unidad}</small>
-                    </div>
-                    <button class="btn btn-sm btn-outline-danger" onclick="eliminarProducto(${index})">
-                        <i class="bi bi-x"></i>
+            <tr>
+                <td>
+                    <strong>${item.nombre}</strong>
+                    <br><small class="text-muted">${item.unidad}</small>
+                </td>
+                <td>
+                    <input type="number" class="form-control form-control-sm" 
+                           value="${item.cantidad}" min="0.01" step="0.01"
+                           onchange="actualizarCantidadSalida(${index}, this.value)">
+                </td>
+                <td>C$${item.costo_total.toFixed(2)}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-danger" onclick="eliminarProductoSalida(${index})">
+                        <i class="bi bi-trash"></i>
                     </button>
-                </div>
-            </div>
+                </td>
+            </tr>
         `;
     });
     
-    // Agregar resumen
-    html = `
-        <div class="alert alert-info py-2 mb-2">
-            <small><strong>Total productos:</strong> ${productosSalida.length} | <strong>Total unidades:</strong> ${totalProductos}</small>
-        </div>
-        ${html}
-    `;
-    
-    container.innerHTML = html;
+    tbody.innerHTML = html;
     btnGuardar.disabled = false;
+    contador.textContent = productosSalida.length;
+    contador2.textContent = productosSalida.length;
+    totalUnidades.textContent = totalUnidadesSum.toFixed(2);
+    totalCosto.textContent = totalCostoSum.toFixed(2);
 }
 
-function eliminarProducto(index) {
-    productosSalida.splice(index, 1);
-    actualizarListaProductos();
+function actualizarCantidadSalida(index, nuevaCantidad) {
+    const cantidad = parseFloat(nuevaCantidad);
+    if (cantidad > 0 && cantidad <= productosSalida[index].stock_disponible) {
+        productosSalida[index].cantidad = cantidad;
+        productosSalida[index].costo_total = cantidad * productosSalida[index].costo_unitario;
+        actualizarListaProductos();
+    }
+}
+
+function eliminarProductoSalida(index) {
+    if (confirm('¿Eliminar este producto de la salida?')) {
+        productosSalida.splice(index, 1);
+        actualizarListaProductos();
+        mostrarToast('Producto eliminado', 'warning');
+    }
 }
 
 function limpiarFormulario() {
-    if (productosSalida.length > 0 && !confirm('¿Está seguro de que desea limpiar el formulario? Se perderán todos los productos agregados.')) return;
+    if (productosSalida.length > 0 && !confirm('¿Limpiar todo el formulario?')) {
+        return;
+    }
     
     productosSalida = [];
     actualizarListaProductos();
     document.getElementById('formSalida').reset();
+    document.getElementById('searchProducto').value = '';
+    
+    // Restablecer búsqueda
+    const rows = document.querySelectorAll('.producto-row');
+    rows.forEach(row => {
+        row.style.display = '';
+    });
+    
+    mostrarToast('Formulario limpiado', 'info');
 }
 
 async function guardarSalida() {
@@ -468,6 +478,8 @@ async function guardarSalida() {
     }
     
     const btnGuardar = document.getElementById('btnGuardar');
+    const originalText = btnGuardar.innerHTML;
+    
     btnGuardar.disabled = true;
     btnGuardar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Procesando...';
     
@@ -479,67 +491,69 @@ async function guardarSalida() {
                 tipo_movimiento_id: tipoMovimiento,
                 bodega_id: bodega,
                 observacion: observacion,
-                items: productosSalida
+                n_factura: document.getElementById('n_factura').value,
+                id_proveedor: document.getElementById('id_proveedor').value || null,
+                items: productosSalida.map(p => ({
+                    producto_id: p.producto_id,
+                    cantidad: p.cantidad
+                }))
             })
         });
         
         const data = await response.json();
         
         if (data.success) {
-            mostrarToast('Salida de inventario registrada exitosamente', 'success');
+            mostrarToast('✅ Salida registrada exitosamente', 'success');
+            
+            // Limpiar después de 1 segundo
             setTimeout(() => {
-                window.location.href = '/inventario/detalle/' + data.movimiento_id;
-            }, 1500);
+                limpiarFormulario();
+                btnGuardar.disabled = false;
+                btnGuardar.innerHTML = originalText;
+            }, 1000);
         } else {
-            mostrarToast(data.message || 'Error al procesar la salida', 'danger');
-            btnGuardar.disabled = false;
-            btnGuardar.innerHTML = '<i class="bi bi-save"></i> Guardar Salida';
+            throw new Error(data.message || 'Error al guardar');
         }
     } catch (error) {
-        mostrarToast('Error de conexión con el servidor', 'danger');
+        mostrarToast(error.message, 'danger');
         btnGuardar.disabled = false;
-        btnGuardar.innerHTML = '<i class="bi bi-save"></i> Guardar Salida';
+        btnGuardar.innerHTML = originalText;
     }
 }
 
-// Búsqueda de productos
-document.getElementById('searchProducto').addEventListener('input', function() {
-    const searchTerm = this.value.toLowerCase();
-    const rows = document.querySelectorAll('.producto-row');
-    
-    rows.forEach(row => {
-        const text = row.textContent.toLowerCase();
-        row.style.display = text.includes(searchTerm) ? '' : 'none';
-    });
-});
-
-// Cerrar popup haciendo clic en el overlay
-document.getElementById('popupOverlay').addEventListener('click', cerrarPopup);
-
-// Función para mostrar notificaciones
+// Sistema de notificaciones Toast
 function mostrarToast(mensaje, tipo = 'info') {
-    const alertClass = {
-        'success': 'alert-success',
-        'warning': 'alert-warning', 
-        'danger': 'alert-danger',
-        'info': 'alert-info'
-    }[tipo] || 'alert-info';
+    const toastContainer = document.getElementById('toastContainer') || crearToastContainer();
     
-    const alertDiv = document.createElement('div');
-    alertDiv.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
-    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 10000; min-width: 300px;';
-    alertDiv.innerHTML = `
-        ${mensaje}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    const toastId = 'toast-' + Date.now();
+    const toastHtml = `
+        <div id="${toastId}" class="toast align-items-center text-bg-${tipo} border-0" role="alert">
+            <div class="d-flex">
+                <div class="toast-body">
+                    ${mensaje}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
     `;
     
-    document.body.appendChild(alertDiv);
+    toastContainer.innerHTML += toastHtml;
+    const toastElement = document.getElementById(toastId);
+    const toast = new bootstrap.Toast(toastElement);
+    toast.show();
     
-    setTimeout(() => {
-        if (alertDiv.parentNode) {
-            alertDiv.remove();
-        }
-    }, 4000);
+    toastElement.addEventListener('hidden.bs.toast', function() {
+        this.remove();
+    });
+}
+
+function crearToastContainer() {
+    const container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.className = 'toast-container position-fixed top-0 end-0 p-3';
+    container.style.zIndex = '9999';
+    document.body.appendChild(container);
+    return container;
 }
 </script>
 {% endblock %}

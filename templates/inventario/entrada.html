@@ -5,7 +5,9 @@
 {% block content %}
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1><i class="bi bi-box-arrow-in-down"></i> Entrada de Inventario</h1>
+        <h1>
+            <i class="bi bi-box-arrow-in-down"></i> Entrada de Inventario
+        </h1>
         <div>
             <button class="btn btn-outline-secondary" onclick="limpiarFormulario()">
                 <i class="bi bi-arrow-clockwise"></i> Limpiar
@@ -50,12 +52,27 @@
 
                         <div class="mb-3">
                             <label for="proveedor" class="form-label">Proveedor</label>
-                            <select id="proveedor" class="form-select">
-                                <option value="">Seleccionar proveedor...</option>
-                                {% for proveedor in proveedores %}
-                                <option value="{{ proveedor.ID_Proveedor }}">{{ proveedor.Nombre }}</option>
-                                {% endfor %}
-                            </select>
+                            <div class="d-flex gap-2">
+                                <select id="proveedor" class="form-select" onchange="filtrarPorProveedor(this.value)">
+                                    <option value="">Seleccionar proveedor...</option>
+                                    {% for proveedor in proveedores %}
+                                    <option value="{{ proveedor.ID_Proveedor }}" 
+                                            {% if proveedor_filtro == proveedor.ID_Proveedor %}selected{% endif %}>
+                                        {{ proveedor.Nombre }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                {% if proveedor_filtro %}
+                                <button type="button" class="btn btn-outline-danger" onclick="limpiarFiltroProveedor()">
+                                    <i class="bi bi-x-circle"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                            {% if proveedor_filtro %}
+                            <small class="text-muted mt-1 d-block">
+                                <i class="bi bi-info-circle"></i> Mostrando productos comprados anteriormente a este proveedor
+                            </small>
+                            {% endif %}
                         </div>
 
                         <div class="row">
@@ -117,11 +134,23 @@
         <div class="col-md-8">
             <div class="card shadow">
                 <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="bi bi-box-seam"></i> Gestión de Productos</h5>
-                    <div class="input-group" style="width: 300px;">
-                        <span class="input-group-text"><i class="bi bi-search"></i></span>
-                        <input type="text" id="searchProducto" class="form-control" 
-                               placeholder="Buscar producto...">
+                    <div>
+                        <h5 class="mb-0"><i class="bi bi-box-seam"></i> Gestión de Productos</h5>
+                        {% if proveedor_filtro %}
+                        <small class="d-block mt-1">
+                            <i class="bi bi-lightning"></i> Filtro activo: {{ productos|length }} productos disponibles
+                        </small>
+                        {% endif %}
+                    </div>
+                    <div class="d-flex gap-2 align-items-center">
+                        <div class="input-group" style="width: 250px;">
+                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                            <input type="text" id="searchProducto" class="form-control" 
+                                   placeholder="Buscar producto...">
+                        </div>
+                        <button class="btn btn-outline-light btn-sm" onclick="mostrarTodosProductos()">
+                            <i class="bi bi-list"></i> Mostrar todos
+                        </button>
                     </div>
                 </div>
                 <div class="card-body">
@@ -157,7 +186,17 @@
                     <!-- Lista de Productos Disponibles -->
                     <h6 class="border-bottom pb-2">
                         <i class="bi bi-box"></i> Catálogo de Productos
+                        <span class="badge bg-light text-dark">{{ productos|length }} productos</span>
                     </h6>
+                    
+                    {% if proveedor_filtro and productos|length == 0 %}
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        No se encontraron productos comprados anteriormente a este proveedor.
+                        <a href="#" onclick="limpiarFiltroProveedor()" class="alert-link">Ver todos los productos</a>
+                    </div>
+                    {% endif %}
+                    
                     <div class="table-responsive" style="max-height: 400px;">
                         <table class="table table-sm table-hover">
                             <thead class="table-light sticky-top">
@@ -195,6 +234,13 @@
                                                 onclick="mostrarModalProducto({{ producto.ID_Producto }}, '{{ producto.Descripcion }}', {{ producto.Existencias_Totales }}, '{{ producto.Abreviatura }}', {{ producto.Costo_Promedio or 0 }})">
                                             <i class="bi bi-plus-lg"></i> Agregar
                                         </button>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-4">
+                                        <i class="bi bi-database-slash display-4 d-block mb-2"></i>
+                                        No hay productos disponibles
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -280,6 +326,32 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
+
+// FUNCIÓN PARA FILTRAR POR PROVEEDOR
+function filtrarPorProveedor(proveedorId) {
+    if (!proveedorId) return;
+    
+    const url = new URL(window.location.href);
+    url.searchParams.set('proveedor_filtro', proveedorId);
+    window.location.href = url.toString();
+}
+
+// FUNCIÓN PARA LIMPIAR FILTRO DE PROVEEDOR
+function limpiarFiltroProveedor() {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('proveedor_filtro');
+    window.location.href = url.toString();
+}
+
+// FUNCIÓN PARA MOSTRAR TODOS LOS PRODUCTOS (en búsqueda)
+function mostrarTodosProductos() {
+    document.getElementById('searchProducto').value = '';
+    const rows = document.querySelectorAll('.producto-row');
+    rows.forEach(row => {
+        row.style.display = '';
+    });
+    mostrarToast('Mostrando todos los productos', 'info');
+}
 
 function mostrarModalProducto(id, nombre, stockActual, unidad, costoPromedio) {
     document.getElementById('modalProductoId').value = id;
