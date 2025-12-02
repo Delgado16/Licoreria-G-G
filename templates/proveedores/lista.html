@@ -27,6 +27,7 @@
                             <th>RUC/Cédula</th>
                             <th>Teléfono</th>
                             <th>Dirección</th>
+                            <th>Estado</th>
                             <th>Acciones</th>
                         </tr>
                     </thead>
@@ -47,6 +48,11 @@
                             </td>
                             <td>{{ proveedor.Direccion or '-' }}</td>
                             <td>
+                                <span class="badge badge-{% if proveedor.Estado == 'activo' %}success{% else %}secondary{% endif %}">
+                                    {{ proveedor.Estado|title }}
+                                </span>
+                            </td>
+                            <td>
                                 <div class="btn-group btn-group-sm">
                                     <a href="{{ url_for('proveedor_editar', id=proveedor.ID_Proveedor) }}" 
                                        class="btn btn-outline-primary" title="Editar">
@@ -56,6 +62,7 @@
                                             data-id="{{ proveedor.ID_Proveedor }}"
                                             data-nombre="{{ proveedor.Nombre }}"
                                             data-ruc="{{ proveedor.RUC_CEDULA or 'Sin RUC/Cédula' }}"
+                                            data-estado="{{ proveedor.Estado }}"
                                             title="Eliminar">
                                         <i class="bi bi-trash"></i>
                                     </button>
@@ -64,7 +71,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="6" class="text-center text-muted">No hay proveedores registrados</td>
+                            <td colspan="7" class="text-center text-muted">No hay proveedores registrados</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -80,7 +87,8 @@
         <div class="modal-content">
             <div class="modal-header bg-danger text-white">
                 <h5 class="modal-title">
-                    <i class="bi bi-exclamation-triangle"></i> Eliminar Proveedor
+                    <i class="bi bi-exclamation-triangle"></i> 
+                    <span id="modalTitulo">Eliminar Proveedor</span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
@@ -88,16 +96,26 @@
                 <div class="mb-3">
                     <i class="bi bi-truck text-danger" style="font-size: 3rem;"></i>
                 </div>
-                <h5 class="mb-3">¿Está seguro de eliminar este proveedor?</h5>
+                <h5 class="mb-3" id="modalMensaje">¿Está seguro de eliminar este proveedor?</h5>
                 
                 <div class="alert alert-light border mb-3">
                     <p class="mb-1 fw-bold" id="modalProveedorNombre"></p>
                     <p class="mb-0">RUC/Cédula: <span id="modalProveedorRuc"></span></p>
+                    <p class="mb-0">Estado actual: <span id="modalProveedorEstado" class="badge"></span></p>
                 </div>
                 
-                <div class="alert alert-warning">
+                <div class="alert alert-warning" id="alertaCompras" style="display: none;">
                     <small>
-                        <i class="bi bi-info-circle"></i> Esta acción no se puede deshacer
+                        <i class="bi bi-info-circle"></i> 
+                        Este proveedor tiene compras asociadas. En lugar de eliminarse completamente, 
+                        se cambiará a estado <strong>inactivo</strong>.
+                    </small>
+                </div>
+                
+                <div class="alert alert-danger" id="alertaEliminacion">
+                    <small>
+                        <i class="bi bi-exclamation-triangle"></i> 
+                        <span id="textoAccion">Esta acción no se puede deshacer</span>
                     </small>
                 </div>
             </div>
@@ -107,7 +125,7 @@
                 </button>
                 <form method="POST" id="formEliminarProveedor">
                     <button type="submit" class="btn btn-danger">
-                        <i class="bi bi-trash"></i> Sí, Eliminar
+                        <i class="bi bi-trash"></i> <span id="textoBoton">Sí, Eliminar</span>
                     </button>
                 </form>
             </div>
@@ -151,10 +169,25 @@ document.addEventListener('click', function(e) {
         const proveedorId = boton.getAttribute('data-id');
         const proveedorNombre = boton.getAttribute('data-nombre');
         const proveedorRuc = boton.getAttribute('data-ruc');
+        const proveedorEstado = boton.getAttribute('data-estado');
         
         // Mostrar información en el modal
         document.getElementById('modalProveedorNombre').textContent = proveedorNombre;
         document.getElementById('modalProveedorRuc').textContent = proveedorRuc;
+        
+        // Mostrar estado actual
+        const estadoSpan = document.getElementById('modalProveedorEstado');
+        estadoSpan.textContent = proveedorEstado.charAt(0).toUpperCase() + proveedorEstado.slice(1);
+        estadoSpan.className = 'badge ' + (proveedorEstado === 'activo' ? 'badge-success' : 'badge-secondary');
+        
+        // Configurar alerta para proveedores activos
+        if (proveedorEstado === 'activo') {
+            document.getElementById('alertaCompras').style.display = 'block';
+            document.getElementById('textoAccion').textContent = 'Si el proveedor tiene compras asociadas, se cambiará a inactivo.';
+        } else {
+            document.getElementById('alertaCompras').style.display = 'none';
+            document.getElementById('textoAccion').textContent = 'Esta acción no se puede deshacer';
+        }
         
         // Configurar el formulario con la URL correcta
         const formEliminar = document.getElementById('formEliminarProveedor');
@@ -191,6 +224,24 @@ a.text-decoration-none:hover {
 
 .btn-secondary {
     padding: 8px 20px;
+}
+
+/* Estilos para badges de estado */
+.badge-success {
+    background-color: #198754;
+    color: white;
+}
+
+.badge-secondary {
+    background-color: #6c757d;
+    color: white;
+}
+
+.badge {
+    padding: 0.35em 0.65em;
+    font-size: 0.75em;
+    font-weight: 700;
+    border-radius: 0.375rem;
 }
 </style>
 {% endblock %}

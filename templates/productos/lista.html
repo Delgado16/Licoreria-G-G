@@ -61,18 +61,16 @@
                             <td>{{ producto.Abreviatura }}</td>
                             <td>
                                 <span class="badge {% if producto.Existencias_Totales <= producto.Stock_Minimo %}bg-warning{% else %}bg-success{% endif %}">
-                                    {{ "%.2f"|format(producto.Existencias_Totales) }}
+                                    {{ producto.Existencias_Totales|int }}
                                 </span>
                             </td>
-                            <td>{{ "%.2f"|format(producto.Stock_Minimo) }}</td>
+                            <td>{{ producto.Stock_Minimo|int }}</td>
                             <td>C${{ "%.2f"|format(producto.Costo_Promedio or 0) }}</td>
                             <td>C${{ "%.2f"|format(producto.Precio_Venta or 0) }}</td>
                             <td>
-                                {% if producto.Existencias_Totales <= producto.Stock_Minimo %}
-                                <span class="badge bg-warning">Stock Bajo</span>
-                                {% else %}
-                                <span class="badge bg-success">Normal</span>
-                                {% endif %}
+                                <span class="badge {% if producto.Existencias_Totales <= producto.Stock_Minimo %}bg-warning{% else %}bg-success{% endif %}">
+                                    {{ 'Stock Bajo' if producto.Existencias_Totales <= producto.Stock_Minimo else 'Normal' }}
+                                </span>
                             </td>
                             <td>
                                 <div class="btn-group btn-group-sm">
@@ -134,10 +132,6 @@
                     </div>
                 </div>
                 
-                <div class="alert alert-warning">
-                    <i class="bi bi-exclamation-circle"></i>
-                    <strong>Advertencia:</strong> Esta acción no se puede deshacer
-                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
@@ -217,7 +211,7 @@ document.addEventListener('click', function(e) {
         
         // Mostrar información en el modal
         document.getElementById('modalNombreProducto').textContent = productoNombre;
-        document.getElementById('modalStockProducto').textContent = parseFloat(productoStock).toFixed(2) + ' unidades';
+        document.getElementById('modalStockProducto').textContent = parseInt(productoStock) + ' unidades';
         document.getElementById('modalIdProducto').textContent = '#' + productoId;
         
         // Configurar el formulario con la URL correcta
@@ -317,7 +311,5 @@ document.head.appendChild(style);
 #productosTable tbody tr:hover {
     background-color: rgba(0, 123, 255, 0.05);
 }
-
-/* Los mensajes flash tienen su propio estilo inline/interno */
 </style>
 {% endblock %}

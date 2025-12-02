@@ -40,7 +40,11 @@
                              data-unidad="{{ producto.Abreviatura }}"
                              data-categoria-nombre="{{ producto.Categoria or 'Sin categoría' }}">
                             <div class="card pos-product-card h-100" 
-                                 onclick="agregarAlCarrito({{ producto.ID_Producto }}, '{{ producto.Descripcion|replace("'", "\\'") }}', {{ producto.Precio_Venta }}, {{ producto.Stock_Bodega }}, '{{ producto.Abreviatura }}')">
+                                 data-producto-id="{{ producto.ID_Producto }}"
+                                 data-producto-nombre="{{ producto.Descripcion }}"
+                                 data-producto-precio="{{ producto.Precio_Venta }}"
+                                 data-producto-stock="{{ producto.Stock_Bodega }}"
+                                 data-producto-unidad="{{ producto.Abreviatura }}">
                                 <div class="card-body p-3">
                                     <h6 class="card-title mb-1 text-truncate">{{ producto.Descripcion }}</h6>
                                     <p class="card-text mb-1">
@@ -93,7 +97,10 @@
                         <select id="metodoPago" class="form-select" required>
                             <option value="">Seleccionar...</option>
                             {% for metodo in metodos_pago %}
-                            <option value="{{ metodo.ID_MetodoPago }}">{{ metodo.Nombre }}</option>
+                            <option value="{{ metodo.ID_MetodoPago }}" 
+                                    data-es-efectivo="{{ 'true' if metodo.Nombre == 'EFECTIVO' else 'false' }}">
+                                {{ metodo.Nombre }}
+                            </option>
                             {% endfor %}
                         </select>
                     </div>
@@ -123,7 +130,7 @@
                         <button id="btnProcesarVenta" class="btn btn-success btn-lg" onclick="procesarVenta()" disabled>
                             <i class="bi bi-check-circle"></i> Procesar Venta
                         </button>
-                        <button class="btn btn-outline-danger" onclick="limpiarCarrito()">
+                        <button type="button" class="btn btn-outline-danger" onclick="limpiarCarrito()">
                             <i class="bi bi-trash"></i> Limpiar Carrito
                         </button>
                     </div>
@@ -144,7 +151,7 @@
             <div class="modal-body text-center">
                 <i class="bi bi-check-circle-fill text-success display-4 mb-3"></i>
                 <h4 class="text-success">¡Venta Procesada!</h4>
-                <p class="mb-1"><strong>Factura:</strong> #<span id="modalFacturaId"></span></p>
+                <p class="mb-1"><strong>Factura:</strong> <span id="modalNFactura"></span></p>
                 <p class="mb-1"><strong>Total:</strong> C$<span id="modalTotal"></span></p>
                 <p class="mb-0"><strong>Cambio:</strong> C$<span id="modalCambio"></span></p>
             </div>
@@ -159,160 +166,6 @@
 {% block extra_js %}
 <script>
 let carrito = [];
-
-// FUNCIONES DE ACTUALIZACIÓN AUTOMÁTICA DE STOCK
-
-// Función para actualizar existencias de productos vendidos
-async function actualizarExistenciasProductosVendidos(productosVendidos) {
-    try {
-        console.log('Actualizando existencias para productos vendidos...');
-        
-        // Actualizar solo los productos que se vendieron
-        for (const item of productosVendidos) {
-            const response = await fetch(`/api/producto/${item.producto_id}?bodega_id=1`);
-            const productoActualizado = await response.json();
-            
-            if (!productoActualizado.error) {
-                const productoElement = document.querySelector(`.producto-item[data-id="${item.producto_id}"]`);
-                if (productoElement) {
-                    // Actualizar datos en el elemento
-                    const nuevoStock = productoActualizado.Stock_Bodega;
-                    productoElement.dataset.stock = nuevoStock;
-                    
-                    // Actualizar visualmente el badge de stock
-                    const badgeStock = productoElement.querySelector('.badge');
-                    if (badgeStock) {
-                        badgeStock.textContent = `Stock: ${nuevoStock}`;
-                        
-                        // Cambiar color según stock
-                        if (nuevoStock > 0) {
-                            badgeStock.className = 'badge bg-success';
-                        } else {
-                            badgeStock.className = 'badge bg-danger';
-                        }
-                    }
-                    
-                    // Actualizar en carrito si existe
-                    const itemCarrito = carrito.find(item => item.producto_id === item.producto_id);
-                    if (itemCarrito) {
-                        itemCarrito.stock = nuevoStock;
-                    }
-                    
-                    // Actualizar la función onclick con el nuevo stock
-                    const card = productoElement.querySelector('.pos-product-card');
-                    if (card) {
-                        if (nuevoStock <= 0) {
-                            // Deshabilitar producto sin stock
-                            card.style.opacity = '0.6';
-                            card.style.cursor = 'not-allowed';
-                            card.onclick = null;
-                            card.classList.add('producto-sin-stock');
-                        } else {
-                            // Habilitar producto con stock
-                            card.style.opacity = '1';
-                            card.style.cursor = 'pointer';
-                            card.classList.remove('producto-sin-stock');
-                            card.onclick = function() {
-                                agregarAlCarrito(
-                                    parseInt(productoElement.dataset.id),
-                                    productoElement.dataset.nombre,
-                                    parseFloat(productoElement.dataset.precio),
-                                    parseInt(productoElement.dataset.stock),
-                                    productoElement.dataset.unidad
-                                );
-                            };
-                        }
-                    }
-                    
-                    console.log(`Producto ${item.producto_id} actualizado: Stock ${nuevoStock}`);
-                }
-            }
-        }
-        
-        mostrarToast('Stock actualizado automáticamente', 'success');
-    } catch (error) {
-        console.error('Error al actualizar existencias:', error);
-        mostrarToast('Error al actualizar stock', 'warning');
-    }
-}
-
-// Función para deshabilitar productos sin stock al cargar la página
-function deshabilitarProductosSinStock() {
-    const productos = document.querySelectorAll('.producto-item');
-    productos.forEach(producto => {
-        const stock = parseInt(producto.dataset.stock) || 0;
-        const card = producto.querySelector('.pos-product-card');
-        
-        if (stock <= 0 && card) {
-            card.style.opacity = '0.6';
-            card.style.cursor = 'not-allowed';
-            card.onclick = null;
-            card.classList.add('producto-sin-stock');
-        }
-    });
-}
-
-// FUNCIONES PRINCIPALES DEL CARRITO
-
-// Cargar venta repetida si existe
-document.addEventListener('DOMContentLoaded', function() {
-    const ventaRepetir = sessionStorage.getItem('ventaRepetir');
-    if (ventaRepetir) {
-        try {
-            const data = JSON.parse(ventaRepetir);
-            mostrarToast(`Cargando venta #${data.factura_id}...`, 'info');
-            
-            // Agregar productos al carrito después de un breve delay
-            setTimeout(() => {
-                data.productos.forEach(producto => {
-                    // Verificar stock actual antes de agregar
-                    verificarStockYAgregar(producto);
-                });
-                sessionStorage.removeItem('ventaRepetir');
-                mostrarToast('Venta cargada en el carrito', 'success');
-            }, 500);
-        } catch (error) {
-            console.error('Error al cargar venta repetida:', error);
-            sessionStorage.removeItem('ventaRepetir');
-        }
-    }
-    
-    // Deshabilitar productos sin stock al cargar la página
-    deshabilitarProductosSinStock();
-    
-    // Focus en búsqueda al cargar la página
-    document.getElementById('searchProducto').focus();
-});
-
-// Verificar stock y agregar producto
-async function verificarStockYAgregar(producto) {
-    try {
-        const response = await fetch(`/api/producto/${producto.producto_id}?bodega_id=1`);
-        const productoActual = await response.json();
-        
-        if (productoActual.error) {
-            mostrarToast(`Producto ${producto.nombre} no disponible`, 'warning');
-            return;
-        }
-        
-        const stockActual = productoActual.Stock_Bodega;
-        
-        if (stockActual >= producto.cantidad) {
-            agregarAlCarrito(
-                producto.producto_id,
-                producto.nombre,
-                producto.precio_venta,
-                stockActual,
-                producto.unidad
-            );
-        } else {
-            mostrarToast(`Stock insuficiente para ${producto.nombre} (disp: ${stockActual})`, 'warning');
-        }
-    } catch (error) {
-        console.error('Error al verificar stock:', error);
-        mostrarToast(`Error al verificar stock de ${producto.nombre}`, 'danger');
-    }
-}
 
 // Función para mostrar notificaciones
 function mostrarToast(mensaje, tipo = 'info') {
@@ -342,8 +195,26 @@ function mostrarToast(mensaje, tipo = 'info') {
     }, 3000);
 }
 
-// Agregar producto al carrito
-function agregarAlCarrito(id, nombre, precio, stock, unidad) {
+// Función para escapar strings para JavaScript
+function escapeJS(str) {
+    if (!str) return '';
+    return str
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '\\r')
+        .replace(/\t/g, '\\t');
+}
+
+// Agregar producto al carrito (usando eventos delegados)
+function agregarAlCarritoDesdeElemento(cardElement) {
+    const id = parseInt(cardElement.dataset.productoId);
+    const nombre = cardElement.dataset.productoNombre;
+    const precio = parseFloat(cardElement.dataset.productoPrecio);
+    const stock = parseInt(cardElement.dataset.productoStock);
+    const unidad = cardElement.dataset.productoUnidad;
+    
     // Validar stock disponible
     if (stock <= 0) {
         mostrarToast('Producto sin stock disponible', 'warning');
@@ -353,9 +224,12 @@ function agregarAlCarrito(id, nombre, precio, stock, unidad) {
     const itemExistente = carrito.find(item => item.producto_id === id);
     
     if (itemExistente) {
-        if (itemExistente.cantidad < stock) {
-            itemExistente.cantidad++;
-            itemExistente.subtotal = itemExistente.cantidad * itemExistente.precio_venta;
+        // Incrementar cantidad en 1 (enteros)
+        const nuevaCantidad = itemExistente.cantidad + 1;
+        
+        if (nuevaCantidad <= itemExistente.stock) {
+            itemExistente.cantidad = nuevaCantidad;
+            itemExistente.subtotal = nuevaCantidad * itemExistente.precio_venta;
         } else {
             mostrarToast('Stock insuficiente', 'warning');
             return;
@@ -365,9 +239,9 @@ function agregarAlCarrito(id, nombre, precio, stock, unidad) {
             producto_id: id,
             nombre: nombre,
             precio_venta: precio,
-            cantidad: 1,
+            cantidad: 1, // Siempre entero
             subtotal: precio,
-            stock: stock,
+            stock: parseInt(stock),
             unidad: unidad
         });
     }
@@ -404,16 +278,17 @@ function actualizarCarrito() {
                     <div class="flex-grow-1 me-2">
                         <strong class="d-block">${item.nombre}</strong>
                         <small class="text-muted">C$${item.precio_venta.toFixed(2)} / ${item.unidad}</small>
+                        <small class="d-block text-muted">Stock disp: ${item.stock}</small>
                     </div>
-                    <button class="btn btn-sm btn-outline-danger" onclick="eliminarDelCarrito(${index})">
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="eliminarDelCarrito(${index})">
                         <i class="bi bi-x"></i>
                     </button>
                 </div>
                 <div class="d-flex justify-content-between align-items-center mt-2">
                     <div class="btn-group btn-group-sm">
-                        <button class="btn btn-outline-secondary" onclick="cambiarCantidad(${index}, -1)">-</button>
-                        <button class="btn btn-outline-dark" disabled>${item.cantidad}</button>
-                        <button class="btn btn-outline-secondary" onclick="cambiarCantidad(${index}, 1)">+</button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="cambiarCantidad(${index}, -1)">-</button>
+                        <button type="button" class="btn btn-outline-dark" disabled>${item.cantidad}</button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="cambiarCantidad(${index}, 1)">+</button>
                     </div>
                     <strong class="text-primary">C$${item.subtotal.toFixed(2)}</strong>
                 </div>
@@ -500,11 +375,12 @@ function calcularCambio() {
     }
 }
 
-// PROCESAR VENTA CON ACTUALIZACIÓN AUTOMÁTICA
-
-// Procesar venta - VERSIÓN MEJORADA CON ACTUALIZACIÓN AUTOMÁTICA
+// Procesar venta
 async function procesarVenta() {
-    const metodoPagoId = document.getElementById('metodoPago').value;
+    const metodoPagoSelect = document.getElementById('metodoPago');
+    const metodoPagoId = metodoPagoSelect.value;
+    const metodoSeleccionado = metodoPagoSelect.options[metodoPagoSelect.selectedIndex];
+    const esEfectivo = metodoSeleccionado.dataset.esEfectivo === 'true';
     const efectivo = parseFloat(document.getElementById('efectivo').value) || 0;
     const observacion = document.getElementById('observacion').value;
     
@@ -521,11 +397,11 @@ async function procesarVenta() {
     
     const total = carrito.reduce((sum, item) => sum + item.subtotal, 0);
     
-    // Validar efectivo si es método efectivo (asumiendo ID 1 es efectivo)
-    const esEfectivo = metodoPagoId === '1';
+    // Validar efectivo si es método efectivo
     if (esEfectivo) {
         if (efectivo <= 0) {
             mostrarToast('Ingresa el efectivo recibido', 'warning');
+            document.getElementById('efectivo').focus();
             return;
         }
         if (efectivo < total) {
@@ -533,6 +409,14 @@ async function procesarVenta() {
             return;
         }
     }
+    
+    // Preparar datos para enviar al backend
+    const itemsParaEnviar = carrito.map(item => ({
+        producto_id: item.producto_id,
+        cantidad: item.cantidad, // Ya es entero
+        precio_venta: item.precio_venta,
+        subtotal: item.subtotal
+    }));
     
     const btnProcesar = document.getElementById('btnProcesarVenta');
     btnProcesar.disabled = true;
@@ -545,7 +429,7 @@ async function procesarVenta() {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                items: carrito,
+                items: itemsParaEnviar,
                 metodo_pago_id: parseInt(metodoPagoId),
                 efectivo: esEfectivo ? efectivo : 0,
                 observacion: observacion,
@@ -556,27 +440,57 @@ async function procesarVenta() {
         const data = await response.json();
         
         if (data.success) {
-            // Guardar una copia del carrito para actualizar existencias
-            const carritoVendido = [...carrito];
-            
             // Mostrar modal de éxito
-            document.getElementById('modalFacturaId').textContent = data.factura_id;
+            document.getElementById('modalNFactura').textContent = data.n_factura || data.factura_id;
             document.getElementById('modalTotal').textContent = data.total.toFixed(2);
             document.getElementById('modalCambio').textContent = data.cambio.toFixed(2);
             
             const modal = new bootstrap.Modal(document.getElementById('ventaExitosaModal'));
             modal.show();
             
-            // ACTUALIZAR EXISTENCIAS AUTOMÁTICAMENTE DESPUÉS DE VENTA EXITOSA
-            await actualizarExistenciasProductosVendidos(carritoVendido);
+            // Actualizar stocks localmente después de venta exitosa
+            carrito.forEach(itemVendido => {
+                const productoElement = document.querySelector(`.producto-item[data-id="${itemVendido.producto_id}"]`);
+                if (productoElement) {
+                    const stockActual = parseInt(productoElement.dataset.stock);
+                    const nuevoStock = stockActual - itemVendido.cantidad;
+                    productoElement.dataset.stock = nuevoStock;
+                    
+                    // Actualizar visualmente
+                    const badgeStock = productoElement.querySelector('.badge');
+                    if (badgeStock) {
+                        badgeStock.textContent = `Stock: ${nuevoStock}`;
+                        badgeStock.className = `badge ${nuevoStock > 0 ? 'bg-success' : 'bg-danger'}`;
+                    }
+                    
+                    // Actualizar también en la tarjeta
+                    const card = productoElement.querySelector('.pos-product-card');
+                    if (card) {
+                        card.dataset.productoStock = nuevoStock;
+                    }
+                    
+                    // Deshabilitar si no hay stock
+                    if (nuevoStock <= 0) {
+                        const card = productoElement.querySelector('.pos-product-card');
+                        if (card) {
+                            card.style.opacity = '0.6';
+                            card.style.cursor = 'not-allowed';
+                            card.classList.add('producto-sin-stock');
+                        }
+                    }
+                }
+            });
             
             // Limpiar carrito automáticamente después de venta exitosa
             carrito = [];
             actualizarCarrito();
-            document.getElementById('metodoPago').value = '';
+            metodoPagoSelect.value = '';
             document.getElementById('efectivo').value = '';
             document.getElementById('observacion').value = '';
             document.getElementById('efectivoContainer').style.display = 'none';
+            
+            // Enfocar en búsqueda para nueva venta
+            document.getElementById('searchProducto').focus();
             
         } else {
             mostrarToast(`❌ ${data.message}`, 'danger');
@@ -590,23 +504,26 @@ async function procesarVenta() {
     }
 }
 
-// Función para imprimir ticket (placeholder)
-function imprimirTicket() {
-    // Aquí puedes implementar la impresión del ticket
-    mostrarToast('Funcionalidad de impresión en desarrollo', 'info');
-    const modal = bootstrap.Modal.getInstance(document.getElementById('ventaExitosaModal'));
-    modal.hide();
-}
-
 // EVENT LISTENERS Y BÚSQUEDA
 
 // Event Listeners
 document.addEventListener('DOMContentLoaded', function() {
+    // Agregar evento de clic a las tarjetas de productos (event delegation)
+    document.getElementById('productosGrid').addEventListener('click', function(e) {
+        // Buscar el elemento .pos-product-card más cercano al clic
+        const cardElement = e.target.closest('.pos-product-card');
+        if (cardElement && !cardElement.classList.contains('producto-sin-stock')) {
+            agregarAlCarritoDesdeElemento(cardElement);
+        }
+    });
+
     // Mostrar/ocultar campo de efectivo según método de pago
     document.getElementById('metodoPago').addEventListener('change', function() {
         const efectivoContainer = document.getElementById('efectivoContainer');
-        // Asumiendo que ID 1 es Efectivo - ajusta según tus datos
-        if (this.value === '1') {
+        const selectedOption = this.options[this.selectedIndex];
+        const esEfectivo = selectedOption.dataset.esEfectivo === 'true';
+        
+        if (esEfectivo) {
             efectivoContainer.style.display = 'block';
             document.getElementById('efectivo').focus();
         } else {
@@ -622,6 +539,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Búsqueda de productos
     document.getElementById('searchProducto').addEventListener('input', filtrarProductos);
     document.getElementById('filterCategoria').addEventListener('change', filtrarProductos);
+    
+    // Enfocar en búsqueda al cargar la página
+    document.getElementById('searchProducto').focus();
 });
 
 // Búsqueda y filtrado de productos
@@ -732,11 +652,6 @@ document.addEventListener('keydown', function(e) {
     pointer-events: none;
 }
 
-/* Estilos para el modal de éxito */
-.modal-success .modal-header {
-    background: linear-gradient(135deg, #28a745, #20c997);
-}
-
 /* Mejoras visuales */
 .card {
     border: none;
@@ -750,6 +665,16 @@ document.addEventListener('keydown', function(e) {
 
 .pos-product-card {
     transition: all 0.3s ease;
+}
+
+/* Estilo para botón deshabilitado */
+.btn:disabled {
+    cursor: not-allowed;
+}
+
+/* Ajustes para el campo de efectivo */
+#efectivoContainer .input-group {
+    max-width: 200px;
 }
 </style>
 {% endblock %}

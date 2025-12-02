@@ -14,18 +14,34 @@
                     </h4>
                 </div>
                 <div class="card-body">
+                    <!-- Mostrar mensajes flash -->
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+                    
                     <form method="POST">
                         <div class="row">
                             <div class="col-md-12 mb-3">
                                 <label for="nombre" class="form-label">Nombre *</label>
                                 <input type="text" class="form-control" id="nombre" name="nombre" 
-                                       value="{{ proveedor.Nombre if proveedor else '' }}" required>
+                                       value="{{ proveedor.Nombre if proveedor else '' }}" 
+                                       required
+                                       oninput="validarNombre()">
+                                <div class="form-text">El nombre debe ser único y no puede estar repetido.</div>
                             </div>
 
                             <div class="col-md-6 mb-3">
                                 <label for="ruc_cedula" class="form-label">RUC/Cédula</label>
                                 <input type="text" class="form-control" id="ruc_cedula" name="ruc_cedula" 
                                        value="{{ proveedor.RUC_CEDULA if proveedor else '' }}">
+                                <div class="form-text">Opcional, pero debe ser único si se proporciona.</div>
                             </div>
 
                             <div class="col-md-6 mb-3">
@@ -38,13 +54,28 @@
                                 <label for="direccion" class="form-label">Dirección</label>
                                 <textarea class="form-control" id="direccion" name="direccion" rows="3">{{ proveedor.Direccion if proveedor else '' }}</textarea>
                             </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                <label for="estado" class="form-label">Estado</label>
+                                <select class="form-control" id="estado" name="estado">
+                                    <option value="activo" {% if proveedor and proveedor.Estado == 'activo' %}selected{% endif %}>
+                                        Activo
+                                    </option>
+                                    <option value="inactivo" {% if proveedor and proveedor.Estado == 'inactivo' %}selected{% endif %}>
+                                        Inactivo
+                                    </option>
+                                </select>
+                                <div class="form-text">
+                                    Los proveedores inactivos no aparecerán en las listas de selección.
+                                </div>
+                            </div>
                         </div>
 
                         <div class="d-flex justify-content-between mt-4">
                             <a href="{{ url_for('proveedores') }}" class="btn btn-secondary">
                                 <i class="bi bi-arrow-left"></i> Cancelar
                             </a>
-                            <button type="submit" class="btn btn-primary">
+                            <button type="submit" class="btn btn-primary" id="btnGuardar">
                                 <i class="bi bi-save"></i> Guardar
                             </button>
                         </div>
@@ -54,4 +85,70 @@
         </div>
     </div>
 </div>
+
+<script>
+// Función para validar el nombre en tiempo real
+function validarNombre() {
+    const nombreInput = document.getElementById('nombre');
+    const nombre = nombreInput.value.trim();
+    
+    if (nombre.length > 0) {
+        // Remover espacios múltiples
+        nombreInput.value = nombre.replace(/\s+/g, ' ');
+    }
+}
+
+// Validación básica del formulario
+document.querySelector('form').addEventListener('submit', function(e) {
+    const nombre = document.getElementById('nombre').value.trim();
+    
+    if (!nombre) {
+        e.preventDefault();
+        alert('El nombre del proveedor es requerido');
+        document.getElementById('nombre').focus();
+        return false;
+    }
+    
+    // Validar longitud del RUC/Cédula si se proporciona
+    const ruc = document.getElementById('ruc_cedula').value.trim();
+    if (ruc && ruc.length > 50) {
+        e.preventDefault();
+        alert('El RUC/Cédula no puede exceder los 50 caracteres');
+        document.getElementById('ruc_cedula').focus();
+        return false;
+    }
+    
+    return true;
+});
+</script>
+
+<style>
+.card {
+    border-radius: 10px;
+    border: 1px solid rgba(0,0,0,.125);
+}
+
+.card-header {
+    border-radius: 9px 9px 0 0 !important;
+}
+
+.form-label {
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+}
+
+.alert {
+    border-radius: 8px;
+}
+
+.btn-primary {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.btn-primary:hover {
+    background-color: #0b5ed7;
+    border-color: #0a58ca;
+}
+</style>
 {% endblock %}

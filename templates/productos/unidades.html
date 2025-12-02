@@ -29,7 +29,7 @@
     </div>
 
     <div class="row">
-        <div class="col-md-8">
+        <div class="col-md-12">
             <div class="card shadow">
                 <div class="card-body">
                     <div class="table-responsive">
@@ -39,27 +39,51 @@
                                     <th>ID</th>
                                     <th>Descripción</th>
                                     <th>Abreviatura</th>
+                                    <th>Estado</th>
                                     <th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for unidad in unidades %}
-                                <tr>
+                                <tr class="{% if unidad.Estado == 'inactivo' %}table-secondary{% endif %}">
                                     <td>{{ unidad.ID_Unidad }}</td>
-                                    <td>{{ unidad.Descripcion }}</td>
+                                    <td>{{ unidad.Descripcion }}
+                                        {% if unidad.Estado == 'inactivo' %}
+                                        <span class="badge bg-warning text-dark ms-2">Inactivo</span>
+                                        {% endif %}
+                                    </td>
                                     <td><span class="badge bg-secondary">{{ unidad.Abreviatura }}</span></td>
                                     <td>
+                                        <span class="badge {% if unidad.Estado == 'activo' %}bg-success{% else %}bg-danger{% endif %}">
+                                            {{ unidad.Estado|title }}
+                                        </span>
+                                    </td>
+                                    <td>
                                         <div class="btn-group btn-group-sm">
+                                            {% if unidad.Estado == 'activo' %}
                                             <button class="btn btn-outline-primary btn-editar-unidad"
                                                     data-id="{{ unidad.ID_Unidad }}"
                                                     data-descripcion="{{ unidad.Descripcion }}"
                                                     data-abreviatura="{{ unidad.Abreviatura }}">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
+                                            {% endif %}
+                                            
+                                            <!-- Botón para cambiar estado (activar/inactivar) -->
+                                            <button class="btn {% if unidad.Estado == 'activo' %}btn-outline-warning{% else %}btn-outline-success{% endif %} btn-cambiar-estado-unidad"
+                                                    data-id="{{ unidad.ID_Unidad }}"
+                                                    data-descripcion="{{ unidad.Descripcion }}"
+                                                    data-estado="{{ unidad.Estado }}">
+                                                <i class="bi {% if unidad.Estado == 'activo' %}bi-pause-circle{% else %}bi-play-circle{% endif %}"></i>
+                                            </button>
+                                            
+                                            <!-- Botón de eliminación física (solo para unidades inactivas sin productos) -->
                                             <button class="btn btn-outline-danger btn-eliminar-unidad"
                                                     data-id="{{ unidad.ID_Unidad }}"
                                                     data-descripcion="{{ unidad.Descripcion }}"
-                                                    data-abreviatura="{{ unidad.Abreviatura }}">
+                                                    data-abreviatura="{{ unidad.Abreviatura }}"
+                                                    data-estado="{{ unidad.Estado }}"
+                                                    {% if unidad.Estado == 'activo' %}disabled{% endif %}>
                                                 <i class="bi bi-trash"></i>
                                             </button>
                                         </div>
@@ -67,7 +91,7 @@
                                 </tr>
                                 {% else %}
                                 <tr>
-                                    <td colspan="4" class="text-center text-muted">No hay unidades registradas</td>
+                                    <td colspan="5" class="text-center text-muted">No hay unidades registradas</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -161,6 +185,54 @@
     </div>
 </div>
 
+<!-- Modal de Confirmación para Cambiar Estado -->
+<div class="modal fade" id="modalCambiarEstadoUnidad" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-exclamation-triangle-fill"></i> Cambiar Estado de Unidad
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center mb-4">
+                    <div class="mb-3">
+                        <i class="bi bi-toggle-on text-warning" style="font-size: 4rem;"></i>
+                    </div>
+                    <h4 class="fw-bold" id="modalCambiarEstadoTitulo"></h4>
+                </div>
+                
+                <div class="card border-warning mb-3">
+                    <div class="card-body text-center">
+                        <h5 class="card-title text-warning" id="modalCambiarEstadoDescripcion"></h5>
+                        <div class="d-flex justify-content-center gap-3 mt-2">
+                            <span class="badge bg-dark" id="modalCambiarEstadoId"></span>
+                            <span class="badge bg-secondary" id="modalCambiarEstadoActual"></span>
+                            <span class="badge bg-info" id="modalCambiarEstadoNuevo"></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="alert alert-warning" role="alert" id="advertenciaProductos">
+                    <i class="bi bi-exclamation-circle me-2"></i>
+                    <strong>Advertencia:</strong> Al inactivar esta unidad, no podrá ser seleccionada en nuevos productos.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-lg"></i> Cancelar
+                </button>
+                <form method="POST" id="formCambiarEstadoUnidad">
+                    <button type="submit" class="btn btn-warning text-white">
+                        <i class="bi bi-check-lg"></i> Confirmar
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Modal de Confirmación para Eliminar Unidad -->
 <div class="modal fade" id="modalEliminarUnidad" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-dialog-centered">
@@ -176,7 +248,7 @@
                     <div class="mb-3">
                         <i class="bi bi-rulers text-danger" style="font-size: 4rem;"></i>
                     </div>
-                    <h4 class="fw-bold">¿Eliminar esta unidad?</h4>
+                    <h4 class="fw-bold">¿Eliminar permanentemente esta unidad?</h4>
                 </div>
                 
                 <div class="card border-danger mb-3">
@@ -185,26 +257,14 @@
                         <div class="d-flex justify-content-center gap-3 mt-2">
                             <span class="badge bg-secondary" id="modalUnidadAbreviatura"></span>
                             <span class="badge bg-dark" id="modalUnidadId"></span>
+                            <span class="badge bg-warning" id="modalUnidadEstado"></span>
                         </div>
                     </div>
                 </div>
                 
-                <div class="alert alert-danger">
-                    <div class="d-flex">
-                        <i class="bi bi-exclamation-octagon-fill me-2 flex-shrink-0"></i>
-                        <div>
-                            <strong>¡Precaución!</strong>
-                            <p class="mb-0 mt-1 small">
-                                Esta unidad podría estar siendo utilizada por productos existentes.
-                                Su eliminación podría afectar la consistencia de los datos.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="alert alert-warning">
-                    <i class="bi bi-info-circle"></i>
-                    <small>Esta acción no se puede deshacer.</small>
+                <div class="alert alert-danger" role="alert">
+                    <i class="bi bi-exclamation-octagon-fill me-2"></i>
+                    <strong>¡Atención!</strong> Esta acción es irreversible y solo se permite para unidades inactivas que no tengan productos asociados.
                 </div>
             </div>
             <div class="modal-footer">
@@ -247,7 +307,7 @@
 
 {% block extra_js %}
 <script>
-// Event delegation para editar unidad
+// Event delegation para manejar todas las acciones
 document.addEventListener('click', function(e) {
     // Botón editar
     if (e.target.closest('.btn-editar-unidad')) {
@@ -266,6 +326,41 @@ document.addEventListener('click', function(e) {
         modal.show();
     }
     
+    // Botón cambiar estado
+    if (e.target.closest('.btn-cambiar-estado-unidad')) {
+        e.preventDefault();
+        const boton = e.target.closest('.btn-cambiar-estado-unidad');
+        
+        const id = boton.getAttribute('data-id');
+        const descripcion = boton.getAttribute('data-descripcion');
+        const estadoActual = boton.getAttribute('data-estado');
+        const nuevoEstado = estadoActual === 'activo' ? 'inactivo' : 'activo';
+        const accion = estadoActual === 'activo' ? 'Inactivar' : 'Activar';
+        
+        // Configurar el modal de cambio de estado
+        document.getElementById('modalCambiarEstadoTitulo').textContent = `${accion} Unidad de Medida`;
+        document.getElementById('modalCambiarEstadoDescripcion').textContent = descripcion;
+        document.getElementById('modalCambiarEstadoId').textContent = 'ID: ' + id;
+        document.getElementById('modalCambiarEstadoActual').textContent = 'Actual: ' + estadoActual;
+        document.getElementById('modalCambiarEstadoNuevo').textContent = 'Nuevo: ' + nuevoEstado;
+        
+        // Mostrar/ocultar advertencia para inactivación
+        const advertencia = document.getElementById('advertenciaProductos');
+        if (estadoActual === 'activo') {
+            advertencia.style.display = 'block';
+        } else {
+            advertencia.style.display = 'none';
+        }
+        
+        // Configurar formulario de cambio de estado
+        const formCambiarEstado = document.getElementById('formCambiarEstadoUnidad');
+        formCambiarEstado.action = `/unidades-medida/cambiar-estado/${id}`;
+        
+        // Mostrar modal
+        const modal = new bootstrap.Modal(document.getElementById('modalCambiarEstadoUnidad'));
+        modal.show();
+    }
+    
     // Botón eliminar
     if (e.target.closest('.btn-eliminar-unidad')) {
         e.preventDefault();
@@ -274,11 +369,13 @@ document.addEventListener('click', function(e) {
         const id = boton.getAttribute('data-id');
         const descripcion = boton.getAttribute('data-descripcion');
         const abreviatura = boton.getAttribute('data-abreviatura');
+        const estado = boton.getAttribute('data-estado');
         
         // Mostrar información en el modal de eliminación
         document.getElementById('modalUnidadDescripcion').textContent = descripcion;
         document.getElementById('modalUnidadAbreviatura').textContent = abreviatura;
         document.getElementById('modalUnidadId').textContent = 'ID: ' + id;
+        document.getElementById('modalUnidadEstado').textContent = 'Estado: ' + estado;
         
         // Configurar formulario de eliminación
         const formEliminar = document.getElementById('formEliminarUnidad');
@@ -290,11 +387,27 @@ document.addEventListener('click', function(e) {
     }
 });
 
+// Configurar envío del formulario de cambio de estado
+const formCambiarEstado = document.getElementById('formCambiarEstadoUnidad');
+if (formCambiarEstado) {
+    formCambiarEstado.addEventListener('submit', function(e) {
+        const submitBtn = this.querySelector('button[type="submit"]');
+        const originalHtml = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Procesando...';
+        submitBtn.disabled = true;
+        
+        // Cerrar modal
+        const modalConfirmar = bootstrap.Modal.getInstance(document.getElementById('modalCambiarEstadoUnidad'));
+        if (modalConfirmar) {
+            modalConfirmar.hide();
+        }
+    });
+}
+
 // Configurar envío del formulario de eliminación
 const formEliminar = document.getElementById('formEliminarUnidad');
 if (formEliminar) {
     formEliminar.addEventListener('submit', function(e) {
-        // Cambiar texto del botón mientras se procesa
         const submitBtn = this.querySelector('button[type="submit"]');
         const originalHtml = submitBtn.innerHTML;
         submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Eliminando...';
@@ -397,7 +510,7 @@ style.textContent = `
         }
     }
     
-    .btn-eliminar-unidad:hover {
+    .btn-eliminar-unidad:hover:not(:disabled) {
         background-color: #dc3545;
         color: white;
     }
@@ -407,10 +520,19 @@ style.textContent = `
         color: white;
     }
     
+    .btn-cambiar-estado-unidad:hover {
+        background-color: #ffc107;
+        color: white;
+    }
+    
     .modal-content {
         border-radius: 10px;
         border: none;
         box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+    }
+    
+    .table-secondary {
+        opacity: 0.7;
     }
 `;
 document.head.appendChild(style);

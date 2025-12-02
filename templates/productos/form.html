@@ -18,7 +18,8 @@
                     {% with messages = get_flashed_messages(with_categories=true) %}
                         {% if messages %}
                             {% for category, message in messages %}
-                                <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show" role="alert">
+                                <div class="alert alert-{{ 'danger' if category == 'error' else 'success' if category == 'success' else 'warning' }} alert-dismissible fade show" role="alert">
+                                    <i class="bi {% if category == 'error' %}bi-exclamation-triangle-fill{% elif category == 'success' %}bi-check-circle-fill{% else %}bi-exclamation-circle-fill{% endif %} me-2"></i>
                                     {{ message }}
                                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                                 </div>
@@ -36,7 +37,8 @@
                                 <label for="descripcion" class="form-label">Descripción *</label>
                                 <input type="text" class="form-control" id="descripcion" name="descripcion" 
                                        value="{{ producto.get('Descripcion', '') if producto else '' }}" 
-                                       required maxlength="255">
+                                       required maxlength="255" placeholder="Ingrese la descripción del producto">
+                                <small class="text-muted">Máximo 255 caracteres</small>
                             </div>
 
                             <div class="col-md-6 mb-3">
@@ -73,6 +75,7 @@
                                            step="0.01" min="0" 
                                            value="{{ "%.2f"|format(producto.get('Costo_Promedio', 0)) if producto else '0.00' }}">
                                 </div>
+                                <small class="text-muted">Opcional, puede ser 0.00</small>
                             </div>
 
                             <div class="col-md-4 mb-3">
@@ -81,16 +84,21 @@
                                     <span class="input-group-text">C$</span>
                                     <input type="number" class="form-control" id="precio_venta" name="precio_venta" 
                                            step="0.01" min="0.01" 
-                                           value="{{ "%.2f"|format(producto.get('Precio_Venta', 0)) if producto else '' }}" required>
+                                           value="{{ "%.2f"|format(producto.get('Precio_Venta', 0)) if producto else '' }}" 
+                                           placeholder="0.00" required>
                                 </div>
+                                <small class="text-muted">Debe ser mayor que 0</small>
                             </div>
 
                             <div class="col-md-4 mb-3">
                                 <label for="stock_minimo" class="form-label">Stock Mínimo *</label>
-                                <input type="number" class="form-control" id="stock_minimo" name="stock_minimo" 
-                                       min="1" step="1" 
-                                       value="{{ producto.get('Stock_Minimo', 5) if producto else '5' }}" required>
-                                <small class="text-muted">Mínimo 1 unidad</small>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="stock_minimo" name="stock_minimo" 
+                                           min="0" step="1" 
+                                           value="{{ producto.get('Stock_Minimo', 5)|int if producto else '5' }}" required>
+                                    <span class="input-group-text">unidades</span>
+                                </div>
+                                <small class="text-muted">Solo valores enteros</small>
                             </div>
 
                             {% if not producto %}
@@ -98,7 +106,7 @@
                                 <label for="existencias_iniciales" class="form-label">Existencias Iniciales</label>
                                 <div class="input-group">
                                     <input type="number" class="form-control" id="existencias_iniciales" name="existencias_iniciales" 
-                                           min="0" step="1" value="0">  <!-- CORRECCIÓN: Cambiado a step="1" -->
+                                           min="0" step="1" value="0">
                                     <span class="input-group-text">unidades</span>
                                 </div>
                                 <small class="text-muted">Cantidad inicial en inventario (solo números enteros)</small>
@@ -108,7 +116,7 @@
                                 <label class="form-label">Existencias Actuales</label>
                                 <div class="input-group">
                                     <input type="text" class="form-control bg-light" 
-                                           value="{{ producto.get('Existencias', 0) }}" 
+                                           value="{{ producto.get('Existencias', 0)|int }}" 
                                            readonly>
                                     <span class="input-group-text">unidades</span>
                                 </div>
@@ -137,11 +145,29 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('productoForm');
     
     form.addEventListener('submit', function(e) {
+        const descripcion = document.getElementById('descripcion').value.trim();
         const precioVenta = parseFloat(document.getElementById('precio_venta').value);
         const stockMinimo = parseInt(document.getElementById('stock_minimo').value);
+        const existenciasIniciales = document.getElementById('existencias_iniciales') ? 
+                                     parseInt(document.getElementById('existencias_iniciales').value) : 0;
+        
+        // Validar descripción
+        if (!descripcion) {
+            e.preventDefault();
+            alert('La descripción no puede estar vacía');
+            document.getElementById('descripcion').focus();
+            return false;
+        }
+        
+        if (descripcion.length > 255) {
+            e.preventDefault();
+            alert('La descripción no puede tener más de 255 caracteres');
+            document.getElementById('descripcion').focus();
+            return false;
+        }
         
         // Validar precio de venta
-        if (precioVenta <= 0 || isNaN(precioVenta)) {
+        if (isNaN(precioVenta) || precioVenta <= 0) {
             e.preventDefault();
             alert('El precio de venta debe ser mayor a 0');
             document.getElementById('precio_venta').focus();
@@ -149,15 +175,43 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // Validar stock mínimo
-        if (stockMinimo < 1 || isNaN(stockMinimo)) {
+        if (isNaN(stockMinimo) || stockMinimo < 0) {
             e.preventDefault();
-            alert('El stock mínimo debe ser al menos 1 unidad');
+            alert('El stock mínimo debe ser un número entero no negativo');
             document.getElementById('stock_minimo').focus();
+            return false;
+        }
+        
+        // Validar existencias iniciales (solo para nuevo producto)
+        if (existenciasIniciales < 0) {
+            e.preventDefault();
+            alert('Las existencias iniciales no pueden ser negativas');
+            document.getElementById('existencias_iniciales').focus();
             return false;
         }
         
         return true;
     });
+    
+    // Formatear números al perder foco
+    const precioInput = document.getElementById('precio_venta');
+    const costoInput = document.getElementById('costo_promedio');
+    
+    if (precioInput) {
+        precioInput.addEventListener('blur', function() {
+            if (this.value) {
+                this.value = parseFloat(this.value).toFixed(2);
+            }
+        });
+    }
+    
+    if (costoInput) {
+        costoInput.addEventListener('blur', function() {
+            if (this.value) {
+                this.value = parseFloat(this.value).toFixed(2);
+            }
+        });
+    }
 });
 </script>
 {% endblock %}

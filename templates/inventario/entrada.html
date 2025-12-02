@@ -51,9 +51,9 @@
                         </div>
 
                         <div class="mb-3">
-                            <label for="proveedor" class="form-label">Proveedor</label>
+                            <label for="proveedor" class="form-label">Proveedor *</label>
                             <div class="d-flex gap-2">
-                                <select id="proveedor" class="form-select" onchange="filtrarPorProveedor(this.value)">
+                                <select id="proveedor" class="form-select" required>
                                     <option value="">Seleccionar proveedor...</option>
                                     {% for proveedor in proveedores %}
                                     <option value="{{ proveedor.ID_Proveedor }}" 
@@ -62,15 +62,23 @@
                                     </option>
                                     {% endfor %}
                                 </select>
+                                <button type="button" class="btn btn-outline-info" onclick="aplicarFiltroProveedor()" 
+                                        title="Ver productos comprados anteriormente">
+                                    <i class="bi bi-funnel"></i>
+                                </button>
                                 {% if proveedor_filtro %}
-                                <button type="button" class="btn btn-outline-danger" onclick="limpiarFiltroProveedor()">
+                                <button type="button" class="btn btn-outline-danger" onclick="quitarFiltroProveedor()">
                                     <i class="bi bi-x-circle"></i>
                                 </button>
                                 {% endif %}
                             </div>
                             {% if proveedor_filtro %}
                             <small class="text-muted mt-1 d-block">
-                                <i class="bi bi-info-circle"></i> Mostrando productos comprados anteriormente a este proveedor
+                                <i class="bi bi-info-circle"></i> 
+                                {% if proveedor_actual_estado != 'activo' %}
+                                <span class="text-warning">Proveedor inactivo - </span>
+                                {% endif %}
+                                Mostrando todos los productos. Los comprados anteriormente aparecen primero.
                             </small>
                             {% endif %}
                         </div>
@@ -79,13 +87,16 @@
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="n_factura" class="form-label">N° Factura/Documento</label>
-                                    <input type="text" id="n_factura" class="form-control" placeholder="Opcional">
+                                    <input type="text" id="n_factura" class="form-control" 
+                                           placeholder="Dejar en blanco para generar automático">
+                                    <small class="text-muted">Dejar vacío para generar referencia interna CMP-000001</small>
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     <label for="fecha_movimiento" class="form-label">Fecha</label>
-                                    <input type="date" id="fecha_movimiento" class="form-control" value="{{ now().strftime('%Y-%m-%d') }}">
+                                    <input type="date" id="fecha_movimiento" class="form-control" 
+                                           value="{{ now().strftime('%Y-%m-%d') }}" readonly>
                                 </div>
                             </div>
                         </div>
@@ -138,7 +149,11 @@
                         <h5 class="mb-0"><i class="bi bi-box-seam"></i> Gestión de Productos</h5>
                         {% if proveedor_filtro %}
                         <small class="d-block mt-1">
-                            <i class="bi bi-lightning"></i> Filtro activo: {{ productos|length }} productos disponibles
+                            <i class="bi bi-lightning"></i> 
+                            Filtro activo: {{ productos|length }} productos disponibles
+                            {% if proveedor_actual_nombre %}
+                            - {{ proveedor_actual_nombre }}
+                            {% endif %}
                         </small>
                         {% endif %}
                     </div>
@@ -187,15 +202,13 @@
                     <h6 class="border-bottom pb-2">
                         <i class="bi bi-box"></i> Catálogo de Productos
                         <span class="badge bg-light text-dark">{{ productos|length }} productos</span>
+                        {% if proveedor_filtro %}
+                        <span class="badge bg-info ms-2">
+                            <i class="bi bi-check-circle"></i> 
+                            {{ productos|selectattr('Comprado_Anteriormente', 'equalto', 1)|list|length }} productos comprados antes
+                        </span>
+                        {% endif %}
                     </h6>
-                    
-                    {% if proveedor_filtro and productos|length == 0 %}
-                    <div class="alert alert-warning">
-                        <i class="bi bi-exclamation-triangle"></i>
-                        No se encontraron productos comprados anteriormente a este proveedor.
-                        <a href="#" onclick="limpiarFiltroProveedor()" class="alert-link">Ver todos los productos</a>
-                    </div>
-                    {% endif %}
                     
                     <div class="table-responsive" style="max-height: 400px;">
                         <table class="table table-sm table-hover">
@@ -203,29 +216,39 @@
                                 <tr>
                                     <th>Producto</th>
                                     <th>Categoría</th>
-                                    <th>Stock Actual</th>
+                                    <th>Existencia</th>
                                     <th>Costo Prom.</th>
                                     <th width="100">Acción</th>
                                 </tr>
                             </thead>
                             <tbody id="productosTableBody">
                                 {% for producto in productos %}
-                                <tr class="producto-row" data-nombre="{{ producto.Descripcion|lower }}" 
-                                    data-categoria="{{ producto.Categoria|lower if producto.Categoria else '' }}">
+                                <tr class="producto-row" 
+                                    data-nombre="{{ producto.Descripcion|lower }}" 
+                                    data-categoria="{{ producto.Categoria|lower if producto.Categoria else '' }}"
+                                    {% if proveedor_filtro and producto.Comprado_Anteriormente %}
+                                    style="background-color: #e8f5e9;"
+                                    {% endif %}>
                                     <td>
                                         <strong>{{ producto.Descripcion }}</strong>
                                         <br>
                                         <small class="text-muted">{{ producto.Abreviatura }}</small>
+                                        {% if proveedor_filtro and producto.Comprado_Anteriormente %}
+                                        <br>
+                                        <small class="text-success">
+                                            <i class="bi bi-check-circle"></i> Comprado antes
+                                        </small>
+                                        {% endif %}
                                     </td>
                                     <td>
                                         <span class="badge bg-light text-dark">{{ producto.Categoria or 'Sin categoría' }}</span>
                                     </td>
                                     <td>
-                                        <span class="badge {% if producto.Existencias_Totales <= producto.Stock_Minimo %}bg-warning{% else %}bg-secondary{% endif %}">
-                                            {{ "%.2f"|format(producto.Existencias_Totales) }} {{ producto.Abreviatura }}
+                                        <span class="badge {% if producto.Existencias_Totales <= producto.Stock_minimo %}bg-warning{% else %}bg-secondary{% endif %}">
+                                            {{ "%.0f"|format(producto.Existencias_Totales) }} {{ producto.Abreviatura }}
                                         </span>
-                                        {% if producto.Existencias_Totales <= producto.Stock_Minimo %}
-                                        <br><small class="text-warning"><i class="bi bi-exclamation-triangle"></i> Stock bajo</small>
+                                        {% if producto.Existencias_Totales <= producto.Stock_minimo %}
+                                        <br><small class="text-warning"><i class="bi bi-exclamation-triangle"></i> Mín: {{ producto.Stock_minimo }}</small>
                                         {% endif %}
                                     </td>
                                     <td>C${{ "%.2f"|format(producto.Costo_Promedio or 0) }}</td>
@@ -273,7 +296,8 @@
                             <div class="mb-3">
                                 <label for="modalCantidad" class="form-label">Cantidad *</label>
                                 <input type="number" id="modalCantidad" class="form-control" 
-                                       min="0.01" step="0.01" required>
+                                       min="1" step="1" required>
+                                <small class="text-muted">Cantidad entera</small>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -292,7 +316,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-success" onclick="agregarDesdeModal()">
+                                <button type="button" class="btn btn-success" onclick="agregarDesdeModal()">
                     <i class="bi bi-plus-circle"></i> Agregar
                 </button>
             </div>
@@ -325,25 +349,127 @@ document.addEventListener('DOMContentLoaded', function() {
             row.style.display = match ? '' : 'none';
         });
     });
+    
+    // Validación en tiempo real de los campos requeridos
+    const camposRequeridos = ['tipo_movimiento', 'bodega', 'proveedor'];
+    camposRequeridos.forEach(id => {
+        document.getElementById(id).addEventListener('change', validarCamposRequeridos);
+    });
 });
 
-// FUNCIÓN PARA FILTRAR POR PROVEEDOR
-function filtrarPorProveedor(proveedorId) {
-    if (!proveedorId) return;
+// FUNCIÓN PARA VALIDAR CAMPOS REQUERIDOS
+function validarCamposRequeridos() {
+    const tipoMovimiento = document.getElementById('tipo_movimiento').value;
+    const bodega = document.getElementById('bodega').value;
+    const proveedor = document.getElementById('proveedor').value;
     
+    return tipoMovimiento && bodega && proveedor;
+}
+
+// FUNCIÓN PARA APLICAR FILTRO DE PROVEEDOR (sin recargar página)
+function aplicarFiltroProveedor() {
+    const proveedorId = document.getElementById('proveedor').value;
+    if (!proveedorId) {
+        mostrarToast('Selecciona un proveedor primero', 'warning');
+        return;
+    }
+    
+    // Actualizar URL sin recargar la página
     const url = new URL(window.location.href);
     url.searchParams.set('proveedor_filtro', proveedorId);
-    window.location.href = url.toString();
+    window.history.pushState({}, '', url);
+    
+    // Recargar solo los productos vía AJAX
+    cargarProductosFiltrados(proveedorId);
+    mostrarToast('Filtro aplicado: productos comprados anteriormente aparecen primero', 'info');
 }
 
-// FUNCIÓN PARA LIMPIAR FILTRO DE PROVEEDOR
-function limpiarFiltroProveedor() {
+// FUNCIÓN PARA CARGAR PRODUCTOS FILTRADOS VÍA AJAX
+async function cargarProductosFiltrados(proveedorId) {
+    try {
+        const response = await fetch(`/api/productos_por_proveedor/${proveedorId}`);
+        const productos = await response.json();
+        
+        // Actualizar la tabla de productos
+        actualizarTablaProductos(productos);
+        
+        // Mostrar información del proveedor
+        const proveedorNombre = document.querySelector(`#proveedor option[value="${proveedorId}"]`).textContent;
+        mostrarToast(`Mostrando productos. Los comprados a ${proveedorNombre} aparecen primero`, 'info');
+    } catch (error) {
+        console.error('Error al cargar productos filtrados:', error);
+    }
+}
+
+// FUNCIÓN PARA ACTUALIZAR TABLA DE PRODUCTOS
+function actualizarTablaProductos(productos) {
+    const tbody = document.getElementById('productosTableBody');
+    
+    if (productos.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" class="text-center text-muted py-4">
+                    <i class="bi bi-database-slash display-4 d-block mb-2"></i>
+                    No hay productos disponibles
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    let html = '';
+    productos.forEach(producto => {
+        html += `
+            <tr class="producto-row" 
+                data-nombre="${producto.Descripcion.toLowerCase()}" 
+                data-categoria="${(producto.Categoria || '').toLowerCase()}"
+                ${producto.Comprado_Anteriormente ? 'style="background-color: #e8f5e9;"' : ''}>
+                <td>
+                    <strong>${producto.Descripcion}</strong>
+                    <br>
+                    <small class="text-muted">${producto.Abreviatura}</small>
+                    ${producto.Comprado_Anteriormente ? 
+                    '<br><small class="text-success"><i class="bi bi-check-circle"></i> Comprado antes</small>' : ''}
+                </td>
+                <td>
+                    <span class="badge bg-light text-dark">${producto.Categoria || 'Sin categoría'}</span>
+                </td>
+                <td>
+                    <span class="badge ${producto.Existencias_Totales <= producto.Stock_minimo ? 'bg-warning' : 'bg-secondary'}">
+                        ${producto.Existencias_Totales} ${producto.Abreviatura}
+                    </span>
+                    ${producto.Existencias_Totales <= producto.Stock_minimo ? 
+                    `<br><small class="text-warning"><i class="bi bi-exclamation-triangle"></i> Mín: ${producto.Stock_minimo}</small>` : ''}
+                </td>
+                <td>C$${parseFloat(producto.Costo_Promedio || 0).toFixed(2)}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-success" 
+                            onclick="mostrarModalProducto(${producto.ID_Producto}, '${producto.Descripcion.replace(/'/g, "\\'")}', ${producto.Existencias_Totales}, '${producto.Abreviatura}', ${producto.Costo_Promedio || 0})">
+                        <i class="bi bi-plus-lg"></i> Agregar
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+    
+    tbody.innerHTML = html;
+}
+
+// FUNCIÓN PARA QUITAR FILTRO DE PROVEEDOR
+function quitarFiltroProveedor() {
+    // Actualizar URL sin recargar la página
     const url = new URL(window.location.href);
     url.searchParams.delete('proveedor_filtro');
-    window.location.href = url.toString();
+    window.history.pushState({}, '', url);
+    
+    // Recargar la página para ver todos los productos
+    location.reload();
 }
 
-// FUNCIÓN PARA MOSTRAR TODOS LOS PRODUCTOS (en búsqueda)
+// ===== FUNCIONES RESTANTES SE MANTIENEN IGUAL =====
+// (mostrarModalProducto, calcularTotalModal, agregarDesdeModal,
+//  actualizarListaProductos, limpiarFormulario, guardarEntrada, etc.)
+
 function mostrarTodosProductos() {
     document.getElementById('searchProducto').value = '';
     const rows = document.querySelectorAll('.producto-row');
@@ -357,14 +483,14 @@ function mostrarModalProducto(id, nombre, stockActual, unidad, costoPromedio) {
     document.getElementById('modalProductoId').value = id;
     document.getElementById('modalProductoNombre').textContent = `${nombre} (${unidad})`;
     document.getElementById('modalCantidad').value = '';
-    document.getElementById('modalCosto').value = costoPromedio || '';
+    document.getElementById('modalCosto').value = costoPromedio.toFixed(2) || '';
     document.getElementById('modalTotal').textContent = 'C$0.00';
     
     modalProducto.show();
 }
 
 function calcularTotalModal() {
-    const cantidad = parseFloat(document.getElementById('modalCantidad').value) || 0;
+    const cantidad = parseInt(document.getElementById('modalCantidad').value) || 0;
     const costo = parseFloat(document.getElementById('modalCosto').value) || 0;
     const total = cantidad * costo;
     document.getElementById('modalTotal').textContent = `C$${total.toFixed(2)}`;
@@ -373,17 +499,23 @@ function calcularTotalModal() {
 function agregarDesdeModal() {
     const id = document.getElementById('modalProductoId').value;
     const nombre = document.getElementById('modalProductoNombre').textContent.split(' (')[0];
-    const cantidad = parseFloat(document.getElementById('modalCantidad').value);
+    const cantidad = parseInt(document.getElementById('modalCantidad').value);
     const costo = parseFloat(document.getElementById('modalCosto').value);
     const unidad = document.getElementById('modalProductoNombre').textContent.match(/\(([^)]+)\)/)[1];
     
-    if (!cantidad || cantidad <= 0 || !costo || costo <= 0) {
-        mostrarToast('Completa cantidad y costo válidos', 'warning');
+    if (!cantidad || cantidad <= 0) {
+        mostrarToast('Ingresa una cantidad válida (número entero)', 'warning');
+        return;
+    }
+    
+    if (!costo || costo <= 0) {
+        mostrarToast('Ingresa un costo válido', 'warning');
         return;
     }
     
     // Verificar si el producto ya existe
     const indexExistente = productosEntrada.findIndex(p => p.producto_id == id);
+    const costoTotal = cantidad * costo;
     
     if (indexExistente !== -1) {
         if (!confirm('Este producto ya está en la lista. ¿Desea actualizar la cantidad y costo?')) {
@@ -391,14 +523,14 @@ function agregarDesdeModal() {
         }
         productosEntrada[indexExistente].cantidad = cantidad;
         productosEntrada[indexExistente].costo = costo;
-        productosEntrada[indexExistente].costo_total = cantidad * costo;
+        productosEntrada[indexExistente].costo_total = costoTotal;
     } else {
         productosEntrada.push({
             producto_id: parseInt(id),
             nombre: nombre,
             cantidad: cantidad,
             costo: costo,
-            costo_total: cantidad * costo,
+            costo_total: costoTotal,
             unidad: unidad
         });
     }
@@ -449,7 +581,7 @@ function actualizarListaProductos() {
                 </td>
                 <td>
                     <input type="number" class="form-control form-control-sm" 
-                           value="${item.cantidad}" min="0.01" step="0.01"
+                           value="${item.cantidad}" min="1" step="1"
                            onchange="actualizarCantidad(${index}, this.value)">
                 </td>
                 <td>
@@ -468,15 +600,15 @@ function actualizarListaProductos() {
     });
     
     tbody.innerHTML = html;
-    btnGuardar.disabled = false;
+    btnGuardar.disabled = !validarCamposRequeridos() || productosEntrada.length === 0;
     totalProductos.textContent = productosEntrada.length;
-    totalCantidad.textContent = totalUnidades.toFixed(2);
+    totalCantidad.textContent = totalUnidades;
     totalMovimiento.textContent = `C$${totalGeneral.toFixed(2)}`;
     contador.textContent = productosEntrada.length;
 }
 
 function actualizarCantidad(index, nuevaCantidad) {
-    const cantidad = parseFloat(nuevaCantidad);
+    const cantidad = parseInt(nuevaCantidad);
     if (cantidad > 0) {
         productosEntrada[index].cantidad = cantidad;
         productosEntrada[index].costo_total = cantidad * productosEntrada[index].costo;
@@ -523,11 +655,8 @@ function limpiarFormulario() {
 
 async function guardarEntrada() {
     // Validaciones básicas
-    const tipoMovimiento = document.getElementById('tipo_movimiento').value;
-    const bodega = document.getElementById('bodega').value;
-    
-    if (!tipoMovimiento || !bodega) {
-        mostrarToast('Selecciona el tipo de movimiento y la bodega', 'warning');
+    if (!validarCamposRequeridos()) {
+        mostrarToast('Completa todos los campos requeridos (*)', 'warning');
         return;
     }
     
@@ -547,19 +676,33 @@ async function guardarEntrada() {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                tipo_movimiento_id: tipoMovimiento,
-                proveedor_id: document.getElementById('proveedor').value || null,
-                bodega_id: bodega,
+                tipo_movimiento_id: document.getElementById('tipo_movimiento').value,
+                proveedor_id: document.getElementById('proveedor').value,
+                bodega_id: document.getElementById('bodega').value,
                 n_factura: document.getElementById('n_factura').value,
                 observacion: document.getElementById('observacion').value,
-                items: productosEntrada
+                items: productosEntrada.map(item => ({
+                    producto_id: item.producto_id,
+                    cantidad: item.cantidad,
+                    costo: item.costo,
+                    costo_total: item.costo_total
+                }))
             })
         });
         
         const data = await response.json();
         
         if (data.success) {
-            mostrarToast('¡Entrada de inventario registrada exitosamente!', 'success');
+            mostrarToast(data.message || '¡Entrada de inventario registrada exitosamente!', 'success');
+            
+            // Crear mensaje detallado
+            let mensajeDetalle = `Movimiento #${data.movimiento_id} registrado.`;
+            if (data.tipo_factura === 'factura_proveedor') {
+                mensajeDetalle += ` Factura: ${data.n_factura}`;
+            } else {
+                mensajeDetalle += ` Referencia: ${data.n_factura}`;
+            }
+            mensajeDetalle += ` - ${data.total_productos} unidades - Total: C$${data.total_costo}`;
             
             // Limpiar el formulario para nueva entrada
             setTimeout(() => {
@@ -578,14 +721,13 @@ async function guardarEntrada() {
                 btnGuardar.disabled = false;
                 btnGuardar.innerHTML = originalText;
                 
-                // Mostrar número de movimiento en el mensaje
-                if (data.movimiento_id) {
-                    mostrarToast(`Entrada #${data.movimiento_id} registrada. Formulario listo para nueva entrada.`, 'success');
-                }
-            }, 1000);
+                // Mostrar mensaje detallado
+                mostrarToast(mensajeDetalle, 'success');
+                
+            }, 1500);
             
         } else {
-            throw new Error(data.message || 'Error al guardar');
+            throw new Error(data.message || 'Error al guardar la entrada');
         }
     } catch (error) {
         mostrarToast(error.message || 'Error de conexión', 'danger');
@@ -596,16 +738,30 @@ async function guardarEntrada() {
 
 // Sistema de notificaciones Toast
 function mostrarToast(mensaje, tipo = 'info') {
-    const toastContainer = document.getElementById('toastContainer') || crearToastContainer();
+    // Crear o obtener el contenedor de toasts
+    let toastContainer = document.getElementById('toastContainer');
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.id = 'toastContainer';
+        toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+        toastContainer.style.zIndex = '9999';
+        document.body.appendChild(toastContainer);
+    }
     
     const toastId = 'toast-' + Date.now();
+    const icon = tipo === 'success' ? 'bi-check-circle' :
+                 tipo === 'warning' ? 'bi-exclamation-triangle' :
+                 tipo === 'danger' ? 'bi-x-circle' : 'bi-info-circle';
+    
     const toastHtml = `
-        <div id="${toastId}" class="toast align-items-center text-bg-${tipo} border-0" role="alert">
-            <div class="d-flex">
-                <div class="toast-body">
-                    ${mensaje}
-                </div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header bg-${tipo} text-white">
+                <i class="bi ${icon} me-2"></i>
+                <strong class="me-auto">Sistema</strong>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body">
+                ${mensaje}
             </div>
         </div>
     `;
@@ -619,15 +775,6 @@ function mostrarToast(mensaje, tipo = 'info') {
     toastElement.addEventListener('hidden.bs.toast', function() {
         this.remove();
     });
-}
-
-function crearToastContainer() {
-    const container = document.createElement('div');
-    container.id = 'toastContainer';
-    container.className = 'toast-container position-fixed top-0 end-0 p-3';
-    container.style.zIndex = '9999';
-    document.body.appendChild(container);
-    return container;
 }
 </script>
 {% endblock %}

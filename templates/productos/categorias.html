@@ -6,9 +6,14 @@
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1><i class="bi bi-tags"></i> Categorías de Productos</h1>
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNuevaCategoria">
-            <i class="bi bi-plus-circle"></i> Nueva Categoría
-        </button>
+        <div>
+            <a href="{{ url_for('categorias_inactivas') }}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-archive"></i> Ver Inactivas
+            </a>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNuevaCategoria">
+                <i class="bi bi-plus-circle"></i> Nueva Categoría
+            </button>
+        </div>
     </div>
 
     <!-- Mensajes flash -->
@@ -16,6 +21,7 @@
         {% if messages %}
             {% for category, message in messages %}
                 <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show">
+                    <i class="bi bi-{{ 'exclamation-triangle' if category == 'error' else 'check-circle' }} me-2"></i>
                     {{ message }}
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
@@ -24,8 +30,14 @@
     {% endwith %}
 
     <div class="row">
-        <div class="col-md-8">
+        <div class="col-md-12">
             <div class="card shadow">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">
+                        <i class="bi bi-list-check"></i> Categorías Activas
+                        <span class="badge bg-primary ms-2">{{ categorias|length }}</span>
+                    </h5>
+                </div>
                 <div class="card-body">
                     <div class="table-responsive">
                         <table class="table table-hover" id="tablaCategorias">
@@ -33,6 +45,7 @@
                                 <tr>
                                     <th>ID</th>
                                     <th>Descripción</th>
+                                    <th>Estado</th>
                                     <th>Acciones</th>
                                 </tr>
                             </thead>
@@ -42,23 +55,33 @@
                                     <td>{{ categoria.ID_Categoria }}</td>
                                     <td>{{ categoria.Descripcion }}</td>
                                     <td>
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-check-circle"></i> {{ categoria.Estado|capitalize }}
+                                        </span>
+                                    </td>
+                                    <td>
                                         <div class="btn-group btn-group-sm">
                                             <button class="btn btn-outline-primary btn-editar" 
                                                     data-id="{{ categoria.ID_Categoria }}"
-                                                    data-descripcion="{{ categoria.Descripcion }}">
+                                                    data-descripcion="{{ categoria.Descripcion }}"
+                                                    title="Editar categoría">
                                                 <i class="bi bi-pencil"></i>
                                             </button>
                                             <button class="btn btn-outline-danger btn-eliminar"
                                                     data-id="{{ categoria.ID_Categoria }}"
-                                                    data-descripcion="{{ categoria.Descripcion }}">
-                                                <i class="bi bi-trash"></i>
+                                                    data-descripcion="{{ categoria.Descripcion }}"
+                                                    title="Desactivar categoría">
+                                                <i class="bi bi-archive"></i>
                                             </button>
                                         </div>
                                     </td>
                                 </tr>
                                 {% else %}
                                 <tr>
-                                    <td colspan="3" class="text-center text-muted">No hay categorías registradas</td>
+                                    <td colspan="4" class="text-center text-muted py-4">
+                                        <i class="bi bi-tags" style="font-size: 3rem;"></i>
+                                        <p class="mt-2">No hay categorías activas registradas</p>
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -87,8 +110,15 @@
                             <i class="bi bi-card-text"></i> Descripción
                         </label>
                         <input type="text" class="form-control" id="descripcion" name="descripcion" 
-                               required maxlength="100" placeholder="Ingrese el nombre de la categoría">
-                        <div class="form-text">Máximo 100 caracteres</div>
+                               required maxlength="100" placeholder="Ingrese el nombre de la categoría"
+                               pattern="[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+" 
+                               title="No se permiten números en el nombre de la categoría">
+                        <div class="form-text">
+                            Máximo 100 caracteres. No se permiten números.
+                        </div>
+                        <div class="invalid-feedback" id="descripcionError">
+                            La descripción no puede contener números ni estar vacía.
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -122,8 +152,15 @@
                             <i class="bi bi-card-text"></i> Descripción
                         </label>
                         <input type="text" class="form-control" id="descripcion_edit" name="descripcion" 
-                               required maxlength="100" placeholder="Ingrese el nombre de la categoría">
-                        <div class="form-text">Máximo 100 caracteres</div>
+                               required maxlength="100" placeholder="Ingrese el nombre de la categoría"
+                               pattern="[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+" 
+                               title="No se permiten números en el nombre de la categoría">
+                        <div class="form-text">
+                            Máximo 100 caracteres. No se permiten números.
+                        </div>
+                        <div class="invalid-feedback" id="descripcionEditError">
+                            La descripción no puede contener números ni estar vacía.
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -139,30 +176,31 @@
     </div>
 </div>
 
-<!-- Modal de Confirmación para Eliminar -->
-<div class="modal fade" id="modalEliminarCategoria" tabindex="-1" aria-labelledby="modalEliminarLabel" aria-hidden="true">
+<!-- Modal de Confirmación para Desactivar -->
+<div class="modal fade" id="modalDesactivarCategoria" tabindex="-1" aria-labelledby="modalDesactivarLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
-            <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title" id="modalEliminarLabel">
-                    <i class="bi bi-exclamation-triangle"></i> Confirmar Eliminación
+            <div class="modal-header bg-warning text-white">
+                <h5 class="modal-title" id="modalDesactivarLabel">
+                    <i class="bi bi-exclamation-triangle"></i> Desactivar Categoría
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <div class="text-center mb-4">
                     <div class="mb-3">
-                        <i class="bi bi-trash" style="font-size: 4rem; color: #dc3545;"></i>
+                        <i class="bi bi-archive" style="font-size: 4rem; color: #ffc107;"></i>
                     </div>
-                    <h5>¿Está seguro que desea eliminar esta categoría?</h5>
+                    <h5>¿Está seguro que desea desactivar esta categoría?</h5>
                     <p class="text-muted" id="categoriaInfoModal">
                         Categoría: <strong></strong>
                     </p>
-                    <div class="alert alert-danger mt-3">
+                    <div class="alert alert-warning mt-3">
                         <small>
-                            <i class="bi bi-exclamation-octagon"></i> <strong>¡Advertencia!</strong><br>
-                            Esta acción no se puede deshacer. Todos los productos asociados a esta categoría 
-                            quedarán sin categoría asignada.
+                            <i class="bi bi-info-circle"></i> <strong>Información:</strong><br>
+                            • La categoría se marcará como inactiva pero no se eliminará permanentemente.<br>
+                            • Puede reactivarla desde la sección de "Categorías Inactivas".<br>
+                            • No se podrán agregar nuevos productos con esta categoría mientras esté inactiva.
                         </small>
                     </div>
                 </div>
@@ -171,9 +209,9 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                     <i class="bi bi-x-circle"></i> Cancelar
                 </button>
-                <form method="POST" id="formEliminarCategoria" style="display: inline;">
-                    <button type="submit" class="btn btn-danger">
-                        <i class="bi bi-trash"></i> Sí, Eliminar
+                <form method="POST" id="formDesactivarCategoria" style="display: inline;">
+                    <button type="submit" class="btn btn-warning text-white">
+                        <i class="bi bi-archive"></i> Sí, Desactivar
                     </button>
                 </form>
             </div>
@@ -223,23 +261,23 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    // Configurar botones de eliminar
-    const modalEliminar = document.getElementById('modalEliminarCategoria');
-    modalEliminar.addEventListener('show.bs.modal', function(event) {
+    // Configurar modal de desactivar
+    const modalDesactivar = document.getElementById('modalDesactivarCategoria');
+    modalDesactivar.addEventListener('show.bs.modal', function(event) {
         const button = event.relatedTarget;
         const categoriaId = button.getAttribute('data-id');
         const categoriaDescripcion = button.getAttribute('data-descripcion');
         
         // Actualizar contenido del modal
-        const modalBody = modalEliminar.querySelector('#categoriaInfoModal strong');
+        const modalBody = modalDesactivar.querySelector('#categoriaInfoModal strong');
         modalBody.textContent = categoriaDescripcion + ' (ID: ' + categoriaId + ')';
         
-        // Configurar formulario de eliminación
-        const formEliminar = document.getElementById('formEliminarCategoria');
-        formEliminar.action = `/categorias/eliminar/${categoriaId}`;
+        // Configurar formulario de desactivación
+        const formDesactivar = document.getElementById('formDesactivarCategoria');
+        formDesactivar.action = `/categorias/eliminar/${categoriaId}`;
     });
     
-    // Inicializar botones de eliminar
+    // Inicializar botones de desactivar
     document.querySelectorAll('.btn-eliminar').forEach(button => {
         button.addEventListener('click', function() {
             const categoriaId = this.getAttribute('data-id');
@@ -252,8 +290,8 @@ document.addEventListener('DOMContentLoaded', function() {
             tempButton.style.display = 'none';
             
             // Disparar el modal
-            const modal = new bootstrap.Modal(modalEliminar);
-            modalEliminar.dispatchEvent(new CustomEvent('show.bs.modal', {
+            const modal = new bootstrap.Modal(modalDesactivar);
+            modalDesactivar.dispatchEvent(new CustomEvent('show.bs.modal', {
                 relatedTarget: tempButton
             }));
             modal.show();
@@ -277,10 +315,16 @@ document.addEventListener('DOMContentLoaded', function() {
     const formNuevaCategoria = document.getElementById('formNuevaCategoria');
     formNuevaCategoria.addEventListener('submit', function(e) {
         const descripcion = document.getElementById('descripcion').value.trim();
-        if (!descripcion) {
+        const inputDescripcion = document.getElementById('descripcion');
+        
+        // Validar que no contenga números
+        const regex = /\d/;
+        if (!descripcion || regex.test(descripcion)) {
             e.preventDefault();
-            alert('Por favor ingrese una descripción para la categoría');
+            inputDescripcion.classList.add('is-invalid');
             return false;
+        } else {
+            inputDescripcion.classList.remove('is-invalid');
         }
     });
     
@@ -288,17 +332,66 @@ document.addEventListener('DOMContentLoaded', function() {
     const formEditarCategoria = document.getElementById('formEditarCategoria');
     formEditarCategoria.addEventListener('submit', function(e) {
         const descripcion = document.getElementById('descripcion_edit').value.trim();
-        if (!descripcion) {
+        const inputDescripcion = document.getElementById('descripcion_edit');
+        
+        // Validar que no contenga números
+        const regex = /\d/;
+        if (!descripcion || regex.test(descripcion)) {
             e.preventDefault();
-            alert('Por favor ingrese una descripción para la categoría');
+            inputDescripcion.classList.add('is-invalid');
             return false;
+        } else {
+            inputDescripcion.classList.remove('is-invalid');
+        }
+    });
+    
+    // Validación en tiempo real para nuevo
+    document.getElementById('descripcion').addEventListener('input', function() {
+        const descripcion = this.value.trim();
+        const regex = /\d/;
+        const errorElement = document.getElementById('descripcionError');
+        
+        if (regex.test(descripcion)) {
+            this.classList.add('is-invalid');
+            errorElement.textContent = 'No se permiten números en la categoría';
+        } else if (!descripcion) {
+            this.classList.add('is-invalid');
+            errorElement.textContent = 'La descripción no puede estar vacía';
+        } else {
+            this.classList.remove('is-invalid');
+        }
+    });
+    
+    // Validación en tiempo real para editar
+    document.getElementById('descripcion_edit').addEventListener('input', function() {
+        const descripcion = this.value.trim();
+        const regex = /\d/;
+        const errorElement = document.getElementById('descripcionEditError');
+        
+        if (regex.test(descripcion)) {
+            this.classList.add('is-invalid');
+            errorElement.textContent = 'No se permiten números en la categoría';
+        } else if (!descripcion) {
+            this.classList.add('is-invalid');
+            errorElement.textContent = 'La descripción no puede estar vacía';
+        } else {
+            this.classList.remove('is-invalid');
         }
     });
     
     // Limpiar formulario de nueva categoría al cerrar
     const modalNueva = document.getElementById('modalNuevaCategoria');
     modalNueva.addEventListener('hidden.bs.modal', function() {
-        document.getElementById('descripcion').value = '';
+        const inputDescripcion = document.getElementById('descripcion');
+        inputDescripcion.value = '';
+        inputDescripcion.classList.remove('is-invalid');
+    });
+    
+    // Limpiar formulario de editar categoría al cerrar
+    const modalEditar = document.getElementById('modalEditarCategoria');
+    modalEditar.addEventListener('hidden.bs.modal', function() {
+        const inputDescripcion = document.getElementById('descripcion_edit');
+        inputDescripcion.classList.remove('is-invalid');
     });
     
     // Buscador de categorías
@@ -306,11 +399,17 @@ document.addEventListener('DOMContentLoaded', function() {
         const tabla = document.getElementById('tablaCategorias');
         if (!tabla) return;
         
+        const searchContainer = document.createElement('div');
+        searchContainer.className = 'mb-3 d-flex align-items-center';
+        
         const input = document.createElement('input');
         input.type = 'text';
-        input.className = 'form-control mb-3';
-        input.placeholder = 'Buscar categorías...';
+        input.className = 'form-control';
+        input.placeholder = 'Buscar categorías por ID o descripción...';
         input.style.maxWidth = '300px';
+        
+        const searchIcon = document.createElement('i');
+        searchIcon.className = 'bi bi-search ms-2 text-muted';
         
         input.addEventListener('keyup', function() {
             const filter = this.value.toLowerCase();
@@ -331,8 +430,11 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
+        searchContainer.appendChild(input);
+        searchContainer.appendChild(searchIcon);
+        
         // Insertar buscador antes de la tabla
-        tabla.parentNode.insertBefore(input, tabla);
+        tabla.parentNode.insertBefore(searchContainer, tabla);
     };
     
     crearBuscador();
